@@ -1,5 +1,5 @@
 import {
-  Injectable, NotFoundException, BadRequestException, ForbiddenException,
+  Injectable, NotFoundException, BadRequestException, ForbiddenException
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -103,6 +103,9 @@ export class PedidosService {
     // Buscar o registro delivers do motoqueiro (FK referencia delivers.id, não users.id)
     const deliver = await this.motoqueirosService.encontrarPorUsuario(motoqueiroUserId);
     if (!deliver) throw new BadRequestException('Perfil de motoqueiro não encontrado.');
+    if (deliver.status !== 'activo') {
+      throw new ForbiddenException('Ainda não foi aprovado pelo administrador.');
+    }
 
     pedido.motoqueiroId = deliver.id;
     pedido.status = StatusPedido.MOTOQUEIRO_ATRIBUIDO;

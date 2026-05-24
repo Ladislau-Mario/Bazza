@@ -8,13 +8,35 @@ const SOCKET_URL = (process.env.EXPO_PUBLIC_API_URL || 'http://10.242.160.144:30
 let socket: Socket | null = null;
 let refCount = 0;
 
+// Espera que o Firebase auth esteja pronto antes de conectar
+function waitForAuth(): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const user = auth.currentUser;
+    if (user) {
+      resolve(user.uid);
+      return;
+    }
+    const timeout = setTimeout(() => {
+      unsubscribe();
+      reject(new Error('[Socket] Auth timeout'));
+    }, 10000);
+    const unsubscribe = auth.onAuthStateChanged((u) => {
+      if (u) {
+        clearTimeout(timeout);
+        unsubscribe();
+        resolve(u.uid);
+      }
+    });
+  });
+}
+
 export async function getSocket(): Promise<Socket> {
   refCount++;
 
   if (socket) return socket;
 
+  const userId = await waitForAuth();
   const token = await getIdToken();
-  const userId = auth.currentUser?.uid;
 
   socket = io(SOCKET_URL, {
     auth: { token, userId },

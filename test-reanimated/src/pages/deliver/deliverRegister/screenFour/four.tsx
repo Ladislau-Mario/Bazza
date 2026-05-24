@@ -60,6 +60,10 @@ export default function DeliverRegisterFour({ navigation, route }: any) {
     try {
       // PASSO 1: Registar motoqueiro + veículo no backend
       await api.post('/motoqueiros/completar-perfil', {
+        nome:           dataFromStepThree.nome,
+        sobrenome:      dataFromStepThree.sobrenome,
+        email:          dataFromStepThree.email,
+        dataNascimento: dataFromStepThree.dataNascimento,
         numeroBI:       dataFromStepThree.numIdentificacao,
         numeroCarta:    dataFromStepThree.numLicenca,
         morada:         dataFromStepThree.morada || '',
