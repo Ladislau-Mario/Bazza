@@ -34,6 +34,10 @@ export class MotoqueirosService {
   async completarPerfilMotoqueiro(
     userId: string,
     dados: {
+      nome?: string;
+      sobrenome?: string;
+      email?: string;
+      dataNascimento?: string;
       numeroBI?: string;
       numeroCarta?: string;
       validadeCarta?: string;
@@ -45,12 +49,24 @@ export class MotoqueirosService {
       ano: number;
     },
   ) {
-    // 1. Atualizar dados de documento no Utilizador
+    // 1. Atualizar dados pessoais e documento no Utilizador
+    const userUpdate: any = {};
+    if (dados.nome) userUpdate.nome = dados.nome;
+    if (dados.sobrenome) userUpdate.sobrenome = dados.sobrenome;
+    if (dados.email) userUpdate.email = dados.email;
+    if (dados.dataNascimento) {
+      // Converter DD/MM/YYYY para Date
+      const [day, month, year] = dados.dataNascimento.split('/');
+      if (day && month && year) {
+        userUpdate.dataNascimento = new Date(`${year}-${month}-${day}`);
+      }
+    }
     if (dados.numeroBI) {
-      await this.userRepo.update(userId, {
-        numeroDocumento: dados.numeroBI,
-        tipoDocumento: 'BI',
-      });
+      userUpdate.numeroDocumento = dados.numeroBI;
+      userUpdate.tipoDocumento = 'BI';
+    }
+    if (Object.keys(userUpdate).length > 0) {
+      await this.userRepo.update(userId, userUpdate);
     }
 
     // 2. Procura ou cria o registo de motoqueiro

@@ -30,7 +30,13 @@ export class MotoqueirosController {
   completarPerfil(
     @CurrentUser() user: User,
     @Body() body: {
-      morada: string;
+      nome?: string;
+      sobrenome?: string;
+      email?: string;
+      dataNascimento?: string;
+      numeroBI?: string;
+      numeroCarta?: string;
+      morada?: string;
       marca: string;
       modelo: string;
       placa: string;
