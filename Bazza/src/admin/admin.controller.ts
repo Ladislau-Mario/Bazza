@@ -55,6 +55,18 @@ export class AdminController {
     return this.service.alterarStatusUtilizador(id, status);
   }
 
+  @Patch('utilizadores/:id/suspender')
+  @ApiOperation({ summary: 'Suspender utilizador' })
+  suspenderUtilizador(@Param('id') id: string) {
+    return this.service.suspenderUtilizador(id);
+  }
+
+  @Patch('utilizadores/:id/ativar')
+  @ApiOperation({ summary: 'Activar utilizador suspenso' })
+  ativarUtilizador(@Param('id') id: string) {
+    return this.service.ativarUtilizador(id);
+  }
+
   @Delete('utilizadores/:id')
   @ApiOperation({ summary: 'Eliminar utilizador (soft delete)' })
   eliminarUtilizador(@Param('id') id: string) {
@@ -106,6 +118,13 @@ export class AdminController {
     @Body('motivo') motivo: string,
   ) {
     return this.service.suspenderMotoqueiro(id, motivo);
+  }
+
+  /** Activar motoqueiro suspenso */
+  @Patch('motoqueiros/:id/ativar')
+  @ApiOperation({ summary: 'Activar motoqueiro suspenso' })
+  ativarMotoqueiro(@Param('id') id: string) {
+    return this.service.ativarMotoqueiro(id);
   }
 
   // ── PEDIDOS ────────────────────────────────────────────────────────────────
@@ -167,10 +186,22 @@ export class AdminController {
     return this.suporteService.alterarStatus(id, body.status);
   }
 
+  @Patch('suporte/:id/fechar')
+  @ApiOperation({ summary: 'Fechar conversa de suporte' })
+  fecharSuporte(@Param('id') id: string) {
+    return this.suporteService.fechar(id);
+  }
+
   @Delete('suporte/todos')
   @ApiOperation({ summary: 'Eliminar todas as conversas de suporte' })
   eliminarTodosSuportes() {
     return this.suporteService.eliminarTodos();
+  }
+
+  @Delete('suporte/:id')
+  @ApiOperation({ summary: 'Eliminar conversa de suporte individual' })
+  eliminarSuporte(@Param('id') id: string) {
+    return this.suporteService.eliminar(id);
   }
 
   // ── DOCUMENTOS ─────────────────────────────────────────────────────────────

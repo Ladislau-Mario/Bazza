@@ -18,11 +18,17 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   handleConnection(client: Socket) {
     console.log(`[Chat] Cliente conectado: ${client.id}`);
-    // Registar sala por utilizador se o token contiver o userId
-    const userId = client.handshake.auth?.userId || client.handshake.query?.userId;
-    if (userId) {
+    try {
+      const userId = client.handshake.auth?.userId || client.handshake.query?.userId;
+      if (!userId) {
+        client.disconnect();
+        return;
+      }
       client.join(`user_${userId}`);
+      (client as any).userId = userId;
       console.log(`[Chat] Utilizador ${userId} entrou na sala user_${userId}`);
+    } catch {
+      client.disconnect();
     }
   }
 
@@ -33,8 +39,12 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   // Utilizador junta-se à sua própria sala (chamado pelo cliente após conectar)
   @SubscribeMessage('user:join')
   handleUserJoin(@MessageBody() data: { userId: string }, @ConnectedSocket() client: Socket) {
-    client.join(`user_${data.userId}`);
-    return { event: 'user:joined', data: { userId: data.userId } };
+    const authUserId = (client as any).userId;
+    if (authUserId && authUserId === data.userId) {
+      client.join(`user_${data.userId}`);
+      return { event: 'user:joined', data: { userId: data.userId } };
+    }
+    return { event: 'user:join_failed', data: { error: 'Unauthorized' } };
   }
 
   // Cliente/Motoqueiro entra na sala do pedido
@@ -48,16 +58,25 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @SubscribeMessage('chat:send')
   async handleMessage(
     @MessageBody() data: {
-      pedidoId: string; remetenteId: string;
-      remetenteTipo: 'cliente' | 'motoqueiro'; texto: string;
+      pedidoId: string;
+      remetenteId?: string;
+      senderId?: string;
+      remetenteTipo?: 'cliente' | 'motoqueiro';
+      senderType?: 'cliente' | 'motoqueiro';
+      texto?: string;
+      text?: string;
     },
     @ConnectedSocket() client: Socket,
   ) {
+    const remetenteId = data.remetenteId ?? data.senderId;
+    const remetenteTipo = data.remetenteTipo ?? data.senderType;
+    const texto = data.texto ?? data.text;
+
     const msg = this.mensagemRepo.create({
       pedidoId: data.pedidoId,
-      remetenteId: data.remetenteId,
-      remetenteTipo: data.remetenteTipo,
-      texto: data.texto,
+      remetenteId,
+      remetenteTipo,
+      texto,
     });
     const saved = await this.mensagemRepo.save(msg);
 
@@ -107,9 +126,19 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   // Buscar histórico de mensagens
   async getHistorico(pedidoId: string) {
-    return this.mensagemRepo.find({
+    const mensagens = await this.mensagemRepo.find({
       where: { pedidoId },
       order: { criadoEm: 'ASC' },
     });
+
+    return mensagens.map((msg) => ({
+      id: msg.id,
+      pedidoId: msg.pedidoId,
+      senderId: msg.remetenteId,
+      senderType: msg.remetenteTipo,
+      text: msg.texto,
+      timestamp: msg.criadoEm,
+      read: msg.lida,
+    }));
   }
 }

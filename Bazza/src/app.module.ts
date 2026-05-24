@@ -50,6 +50,9 @@ import { PreferenciasModule } from './preferencias/preferencias.module';
 import { AdminLog } from './admin/entities/admin-log.entity';
 import { Preferencia } from './preferencias/entities/preferencia.entity';
 import { SeedModule } from './seeds/seed.module';
+import { PrecificacaoModule } from './precificacao/precificacao.module';
+import { PaymentsModule } from './payments/payments.module';
+import { MensagemChat } from './chat/entities/mensagem.entity';
 
 @Module({
   imports: [
@@ -85,6 +88,7 @@ import { SeedModule } from './seeds/seed.module';
         Plano,
         AdminLog,
         Preferencia,
+        MensagemChat,
       ],
       synchronize: process.env.NODE_ENV !== 'production',
       logging: false,
@@ -110,6 +114,8 @@ import { SeedModule } from './seeds/seed.module';
     ChatModule,
     PreferenciasModule,
     SeedModule,
+    PrecificacaoModule,
+    PaymentsModule,
   ],
   providers: [
     Reflector,

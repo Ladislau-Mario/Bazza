@@ -27,6 +27,10 @@ export class MotoqueirosService {
     return this.motoRepo.findOne({ where: { userId } });
   }
 
+  async encontrarPorUsuarioComUser(userId: string): Promise<Deliver | null> {
+    return this.motoRepo.findOne({ where: { userId }, relations: ['user'] });
+  }
+
   async completarPerfilMotoqueiro(
     userId: string,
     dados: {
@@ -107,7 +111,7 @@ export class MotoqueirosService {
   }
 
   async buscarMeusDocumentos(userId: string) {
-    return this.uploadRepo
+    const uploads = await this.uploadRepo
       .createQueryBuilder('u')
       .where('u.userId = :userId', { userId })
       .andWhere('u.tipo IN (:...tipos)', {
@@ -117,6 +121,8 @@ export class MotoqueirosService {
           'documento_carta_frente',
           'documento_carta_verso',
           'foto_veiculo',
+          'foto_placa',
+          'foto_perfil',
         ],
       })
       .select([
@@ -130,7 +136,18 @@ export class MotoqueirosService {
         'u.criadoEm',
       ])
       .orderBy('u.criadoEm', 'DESC')
-      .getRawMany();
+      .getMany();
+
+    return uploads.map((u) => ({
+      id: u.id,
+      tipo: u.tipo,
+      nomeOriginal: u.nomeOriginal,
+      mimeType: u.mimeType,
+      tamanho: u.tamanho,
+      status: u.status,
+      motivoRejeicao: u.motivoRejeicao,
+      criadoEm: u.criadoEm,
+    }));
   }
 
   async listarPendentesAprovacao() {

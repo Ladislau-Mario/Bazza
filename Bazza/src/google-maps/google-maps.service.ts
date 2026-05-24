@@ -8,7 +8,7 @@ export class GoogleMapsService {
   private readonly apiKey: string | undefined;
 
   constructor(private config: ConfigService) {
-    this.apiKey = this.config.get('AIzaSyDd_4H92FOH4VtBOp7U2QgkhAq9B7dsz0k');
+    this.apiKey = this.config.get<string>('GOOGLE_MAPS_API_KEY');
   }
 
   // Calcula distância e tempo entre dois pontos
