@@ -3,6 +3,7 @@ import {
   CanActivate,
   ExecutionContext,
   UnauthorizedException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import * as admin from 'firebase-admin';
@@ -55,6 +56,15 @@ export class FirebaseAuthGuard implements CanActivate {
       if (!user) {
         throw new UnauthorizedException('Utilizador não encontrado na base de dados');
       }
+
+      // Bloquear utilizadores eliminados ou suspensos
+      if (user.status === 'eliminado') {
+        throw new ForbiddenException('Esta conta foi eliminada.');
+      }
+      if (user.status === 'suspended') {
+        throw new ForbiddenException('Esta conta está suspensa.');
+      }
+
       request.user = user;
 
       return true;

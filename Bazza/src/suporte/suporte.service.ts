@@ -27,10 +27,12 @@ export class SuporteService {
   }
 
   async listarDoUtilizador(userId: string) {
-    return this.repo.find({
-      where: { userId },
-      order: { criadoEm: 'DESC' },
-    });
+    return this.repo
+      .createQueryBuilder('s')
+      .where('s.userId = :userId', { userId })
+      .andWhere('s.status NOT IN (:...excluidos)', { excluidos: ['eliminado'] })
+      .orderBy('s.criadoEm', 'DESC')
+      .getMany();
   }
 
   async buscarPorId(id: string) {
@@ -47,6 +49,11 @@ export class SuporteService {
     // Verificar que o ticket existe
     const ticket = await this.repo.findOne({ where: { id: ticketId } });
     if (!ticket) throw new NotFoundException('Ticket não encontrado.');
+
+    // Bloquear mensagens em tickets fechados ou eliminados
+    if (ticket.status === 'fechado' || ticket.status === 'eliminado') {
+      throw new NotFoundException('Ticket não encontrado.');
+    }
 
     // Se o ticket estava resolvido, reabrir
     if (ticket.status === 'resolvido') {
@@ -101,11 +108,31 @@ export class SuporteService {
     return { message: `Ticket actualizado para ${status}` };
   }
 
+  async fechar(ticketId: string) {
+    const ticket = await this.repo.findOne({ where: { id: ticketId } });
+    if (!ticket) throw new NotFoundException('Ticket não encontrado');
+    ticket.status = 'fechado';
+    await this.repo.save(ticket);
+    return { message: 'Conversa fechada' };
+  }
+
+  async eliminar(ticketId: string) {
+    const ticket = await this.repo.findOne({ where: { id: ticketId } });
+    if (!ticket) throw new NotFoundException('Ticket não encontrado');
+    // Eliminar mensagens primeiro (CASCADE deve tratar, mas por segurança)
+    await this.msgRepo.delete({ ticketId });
+    // Eliminar o ticket
+    await this.repo.delete(ticketId);
+    return { message: 'Conversa eliminada' };
+  }
+
   async listarTodosTickets() {
-    return this.repo.find({
-      order: { criadoEm: 'DESC' },
-      relations: ['user'],
-    });
+    return this.repo
+      .createQueryBuilder('s')
+      .leftJoinAndSelect('s.user', 'user')
+      .where('s.status NOT IN (:...excluidos)', { excluidos: ['eliminado'] })
+      .orderBy('s.criadoEm', 'DESC')
+      .getMany();
   }
 
   async eliminarTodos() {

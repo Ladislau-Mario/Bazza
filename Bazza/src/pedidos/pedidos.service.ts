@@ -109,12 +109,23 @@ export class PedidosService {
     pedido.atribuidoEm = new Date();
     await this.repo.save(pedido);
 
-    // Emitir evento socket
+    // Buscar deliver com user relation para enviar dados completos
+    const deliverCompleto = await this.motoqueirosService.encontrarPorUsuarioComUser(motoqueiroUserId);
+
+    // Emitir evento socket com dados completos do motoqueiro
     try {
       this.chatGateway.server.to(`pedido_${pedido.id}`).emit('order:status_update', {
         pedidoId: pedido.id,
         status: pedido.status,
         motoqueiroId: motoqueiroUserId,
+        motoqueiro: deliverCompleto ? {
+          id: deliverCompleto.id,
+          nome: deliverCompleto.user?.nome || '',
+          telefone: deliverCompleto.user?.telefone || '',
+          fotoPerfil: deliverCompleto.user?.fotoPerfilUrl || '',
+          rating: Number(deliverCompleto.classificacaoMedia) || 0,
+          totalAvaliacoes: deliverCompleto.totalAvaliacoes || 0,
+        } : undefined,
       });
     } catch {}
 
@@ -150,10 +161,9 @@ export class PedidosService {
       pedido.recolhidoEm = new Date();
     }
 
-    // "entregue" agora só via confirmarEntrega (QR/código) — mas mantemos fallback
+    // "entregue" agora só via confirmarEntrega (QR/código)
     if (novoStatus === StatusPedido.ENTREGUE) {
       pedido.entregueEm = new Date();
-      await this._creditarMotoqueiro(pedido, motoqueiroUserId);
     }
 
     await this.repo.save(pedido);
@@ -245,7 +255,8 @@ export class PedidosService {
 
   // ── 5. CANCELAR ────────────────────────────────────────────────────────────
   async cancelar(pedidoId: string, userId: string, motivo: string) {
-    const pedido = await this.repo.findOneOrFail({ where: { id: pedidoId } });
+    const pedido = await this.repo.findOne({ where: { id: pedidoId }, relations: ['cliente', 'motoqueiro', 'motoqueiro.user'] });
+    if (!pedido) throw new NotFoundException('Pedido não encontrado.');
 
     // Verificar permissão: cliente ou motoqueiro dono do pedido
     const isCliente = pedido.clienteId === userId;
@@ -269,6 +280,20 @@ export class PedidosService {
         status: 'cancelado',
       });
     } catch {}
+
+    // Notificar a outra parte
+    const notificarUserId = isCliente
+      ? (await this.repo.findOne({ where: { id: pedidoId }, relations: ['motoqueiro', 'motoqueiro.user'] }))?.motoqueiro?.user?.id
+      : pedido.clienteId;
+    if (notificarUserId) {
+      await this.notifications.criar(
+        notificarUserId,
+        'pedido_cancelado',
+        '❌ Pedido cancelado',
+        `O pedido ${pedido.numeroPedido} foi cancelado. Motivo: ${motivo}`,
+        { tipo: 'pedido_cancelado', numeroPedido: pedido.numeroPedido, pedidoId: pedido.id },
+      );
+    }
 
     return pedido;
   }

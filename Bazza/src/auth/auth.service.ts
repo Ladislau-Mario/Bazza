@@ -69,10 +69,27 @@ export class AuthService {
         telefoneVerificado: true,
       });
     }
+    if (!user) throw new BadRequestException('Erro ao processar utilizador');
 
     // Bloquear administradores de usar a app mobile
     if (user.role === 'admin') {
       throw new ForbiddenException('Esta conta é de administrador. Usa o painel web para aceder.');
+    }
+
+    // User eliminado — permitir re-registo
+    if (user.status === 'eliminado') {
+      await this.usersService.atualizar(user.id, {
+        status: 'active' as any,
+        role: 'client' as any,
+        telefone: tel,
+        telefoneVerificado: true,
+      } as any);
+      user = await this.usersService.buscarPorId(user.id);
+    }
+
+    // Bloquear utilizadores suspensos
+    if (user.status === 'suspended') {
+      throw new ForbiddenException('Esta conta está suspensa. Contacta o suporte para mais informações.');
     }
 
     // IMPORTANTE: Actualizar firebaseUid para o UUID do user
@@ -122,6 +139,11 @@ export class AuthService {
       });
     }
 
+    // Bloquear utilizadores eliminados
+    if (user.status === 'eliminado') {
+      throw new ForbiddenException('Esta conta foi eliminada.');
+    }
+
     // Garantir que o user tem role admin
     if (user.role !== 'admin') {
       await this.usersService.atualizar(user.id, { role: 'admin' as any });
@@ -153,6 +175,26 @@ export class AuthService {
         fotoPerfil: data.photoURL || undefined,
       });
     } else {
+      // User eliminado — permitir re-registo (resetar status e dados)
+      if (user.status === 'eliminado') {
+        const partes = (data.displayName || '').trim().split(' ');
+        await this.usersService.atualizar(user.id, {
+          status: 'active' as any,
+          role: 'client' as any,
+          nome: partes[0] || user.nome || 'Utilizador',
+          sobrenome: partes.slice(1).join(' ') || user.sobrenome || '',
+          email: data.email || user.email,
+          fotoPerfilUrl: data.photoURL || user.fotoPerfil,
+          telefone: undefined as any,
+          telefoneVerificado: false,
+        } as any);
+        user = await this.usersService.findOneByFirebaseUid(data.uid);
+        return { message: 'Conta reactivada', isNewUser: true, user };
+      }
+      // Bloquear utilizadores suspensos
+      if (user.status === 'suspended') {
+        throw new ForbiddenException('Esta conta está suspensa. Contacta o suporte para mais informações.');
+      }
       // Actualiza foto se não tiver
       if (data.photoURL && !user.fotoPerfil) {
         await this.usersService.atualizar(user.id, { fotoPerfilUrl: data.photoURL } as any);

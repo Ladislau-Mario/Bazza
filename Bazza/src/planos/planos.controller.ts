@@ -17,7 +17,7 @@ export class PlanosController {
   constructor(private readonly service: PlanosService) {}
 
   @Post('submeter')
-  @UseInterceptors(FileInterceptor('comprovativo', { storage: memoryStorage() }))
+  @UseInterceptors(FileInterceptor('comprovativo', { storage: memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } }))
   submeter(
     @CurrentUser() user: User,
     @Body('tipo') tipo: TipoPlano,

@@ -29,7 +29,7 @@ export class AdminService {
       totalUtilizadores, totalMotoqueiros, totalPedidos,
       pedidosEntregues, ticketsAbertos, motoqueiroPendentes,
     ] = await Promise.all([
-      this.userRepo.count(),
+      this.userRepo.count({ where: { status: UserStatus.ACTIVE } }),
       this.motoRepo.count(),
       this.pedidoRepo.count(),
       this.pedidoRepo.count({ where: { status: StatusPedido.ENTREGUE } }),
@@ -45,9 +45,11 @@ export class AdminService {
 
   // ── UTILIZADORES ───────────────────────────────────────────────────────────
   async listarUtilizadores(role?: string) {
-    const where: any = {};
-    if (role) where.role = role as UserRole;
-    return this.userRepo.find({ where, order: { criadoEm: 'DESC' } });
+    const qb = this.userRepo.createQueryBuilder('u')
+      .where('u.status != :eliminado', { eliminado: UserStatus.ELIMINADO })
+      .orderBy('u.criadoEm', 'DESC');
+    if (role) qb.andWhere('u.role = :role', { role });
+    return qb.getMany();
   }
 
   async obterUtilizador(id: string) {
@@ -62,18 +64,37 @@ export class AdminService {
     return { message: `Utilizador ${status === 'active' ? 'activado' : 'suspenso'}` };
   }
 
+  async suspenderUtilizador(id: string) {
+    const user = await this.userRepo.findOne({ where: { id } });
+    if (!user) throw new NotFoundException('Utilizador não encontrado');
+    if (user.status === UserStatus.ELIMINADO) {
+      throw new BadRequestException('Não é possível suspender um utilizador eliminado');
+    }
+    await this.userRepo.update(id, { status: UserStatus.SUSPENDED });
+    return { message: 'Utilizador suspenso com sucesso' };
+  }
+
+  async ativarUtilizador(id: string) {
+    const user = await this.userRepo.findOne({ where: { id } });
+    if (!user) throw new NotFoundException('Utilizador não encontrado');
+    if (user.status === UserStatus.ELIMINADO) {
+      throw new BadRequestException('Não é possível activar um utilizador eliminado');
+    }
+    await this.userRepo.update(id, { status: UserStatus.ACTIVE });
+    return { message: 'Utilizador activado com sucesso' };
+  }
+
   async eliminarUtilizador(id: string) {
     const user = await this.userRepo.findOne({ where: { id } });
     if (!user) throw new NotFoundException('Utilizador não encontrado');
+    if (user.status === UserStatus.ELIMINADO) {
+      throw new BadRequestException('Utilizador já foi eliminado');
+    }
 
-    // Soft delete: anonimizar dados
+    // Soft delete: marcar como eliminado, preservar dados
     await this.userRepo.update(id, {
-      nome: 'Utilizador',
-      sobrenome: 'Removido',
-      email: `removido_${id}@baza.ao`,
-      telefone: null as any,
+      status: UserStatus.ELIMINADO,
       fcmToken: null as any,
-      status: UserStatus.SUSPENDED,
     });
 
     return { message: 'Conta eliminada com sucesso' };
@@ -168,12 +189,14 @@ export class AdminService {
     return { message: 'Motoqueiro rejeitado' };
   }
 
-  /** Listar todos os motoqueiros com user e veículos */
+  /** Listar todos os motoqueiros com user e veículos (exclui eliminados) */
   async listarTodosMotoqueiros() {
-    return this.motoRepo.find({
-      relations: ['user', 'veiculos'],
-      order: { criadoEm: 'DESC' },
-    });
+    return this.motoRepo.createQueryBuilder('m')
+      .leftJoinAndSelect('m.user', 'u')
+      .leftJoinAndSelect('m.veiculos', 'v')
+      .where('u.status != :eliminado OR u.status IS NULL', { eliminado: UserStatus.ELIMINADO })
+      .orderBy('m.criadoEm', 'DESC')
+      .getMany();
   }
 
   /** Suspender motoqueiro */
@@ -189,6 +212,20 @@ export class AdminService {
     await this.userRepo.update(motoqueiro.userId, { status: UserStatus.SUSPENDED });
 
     return { message: 'Motoqueiro suspenso' };
+  }
+
+  async ativarMotoqueiro(id: string) {
+    const motoqueiro = await this.motoRepo.findOne({ where: { id }, relations: ['user'] });
+    if (!motoqueiro) throw new NotFoundException('Motoqueiro não encontrado');
+
+    await this.motoRepo.update(id, {
+      status: DeliverStatus.ACTIVO,
+      motivoRejeicao: null as any,
+    });
+    // Activar o user também
+    await this.userRepo.update(motoqueiro.userId, { status: UserStatus.ACTIVE });
+
+    return { message: 'Motoqueiro activado' };
   }
 
   // ── PEDIDOS ────────────────────────────────────────────────────────────────

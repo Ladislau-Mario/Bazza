@@ -78,6 +78,53 @@ export class NotificationsService {
     return { message: 'Marcada como lida' };
   }
 
+  // ── Envio em massa (admin) ────────────────────────────────────────
+
+  async enviarParaUsuario(userId: string, titulo: string, mensagem: string, tipo: string = 'info') {
+    return this.criar(userId, tipo, titulo, mensagem, { tipo, origem: 'admin' });
+  }
+
+  async enviarParaUsuarios(userIds: string[], titulo: string, mensagem: string, tipo: string = 'info') {
+    const resultados: Notificacao[] = [];
+    for (const userId of userIds) {
+      try {
+        const notif = await this.criar(userId, tipo, titulo, mensagem, { tipo, origem: 'admin' });
+        resultados.push(notif);
+      } catch (err: any) {
+        this.logger.error(`Erro ao enviar notificação para ${userId}: ${err.message}`);
+      }
+    }
+    return { enviados: resultados.length, total: userIds.length };
+  }
+
+  async enviarParaGrupo(role: string, titulo: string, mensagem: string, tipo: string = 'info') {
+    const users = await this.usersService.listarPorRole(role);
+    const resultados: Notificacao[] = [];
+    for (const user of users) {
+      try {
+        const notif = await this.criar(user.id, tipo, titulo, mensagem, { tipo, origem: 'admin', grupo: role });
+        resultados.push(notif);
+      } catch (err: any) {
+        this.logger.error(`Erro ao enviar notificação para ${user.id}: ${err.message}`);
+      }
+    }
+    return { enviados: resultados.length, total: users.length };
+  }
+
+  async enviarParaTodos(titulo: string, mensagem: string, tipo: string = 'info') {
+    const users = await this.usersService.listarTodos();
+    const resultados: Notificacao[] = [];
+    for (const user of users) {
+      try {
+        const notif = await this.criar(user.id, tipo, titulo, mensagem, { tipo, origem: 'admin' });
+        resultados.push(notif);
+      } catch (err: any) {
+        this.logger.error(`Erro ao enviar notificação para ${user.id}: ${err.message}`);
+      }
+    }
+    return { enviados: resultados.length, total: users.length };
+  }
+
   // Templates prontos — usam criar() para persistir + push
   async notificarPedidoAceite(userId: string, numeroPedido: string) {
     await this.criar(

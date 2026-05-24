@@ -28,7 +28,7 @@ export class UploadsController {
 
   // ── FOTO DE PERFIL ────────────────────────────────────
   @Post('foto-perfil')
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 10 * 1024 * 1024 } }))
   @ApiOperation({ summary: 'Upload de foto de perfil' })
   uploadFotoPerfil(
     @CurrentUser() user: User,
@@ -40,7 +40,7 @@ export class UploadsController {
 
   // ── DOCUMENTOS ────────────────────────────────────────
   @Post('documento-bi-frente')
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 10 * 1024 * 1024 } }))
   @ApiOperation({ summary: 'Upload de BI (frente)' })
   uploadBIFrente(
     @CurrentUser() user: User,
@@ -51,7 +51,7 @@ export class UploadsController {
   }
 
   @Post('documento-bi-verso')
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 10 * 1024 * 1024 } }))
   @ApiOperation({ summary: 'Upload de BI (verso)' })
   uploadBIVerso(
     @CurrentUser() user: User,
@@ -62,7 +62,7 @@ export class UploadsController {
   }
 
   @Post('documento-carta-frente')
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 10 * 1024 * 1024 } }))
   @ApiOperation({ summary: 'Upload de Carta (frente)' })
   uploadCartaFrente(
     @CurrentUser() user: User,
@@ -73,7 +73,7 @@ export class UploadsController {
   }
 
   @Post('documento-carta-verso')
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 10 * 1024 * 1024 } }))
   @ApiOperation({ summary: 'Upload de Carta (verso)' })
   uploadCartaVerso(
     @CurrentUser() user: User,
@@ -84,7 +84,7 @@ export class UploadsController {
   }
 
   @Post('foto-veiculo')
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 10 * 1024 * 1024 } }))
   @ApiOperation({ summary: 'Upload de foto do veículo' })
   uploadFotoVeiculo(
     @CurrentUser() user: User,
@@ -95,7 +95,7 @@ export class UploadsController {
   }
 
   @Post('foto-placa')
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 10 * 1024 * 1024 } }))
   @ApiOperation({ summary: 'Upload de foto da placa do veículo' })
   uploadFotoPlaca(
     @CurrentUser() user: User,
@@ -106,7 +106,7 @@ export class UploadsController {
   }
 
   @Post('prova-entrega')
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 10 * 1024 * 1024 } }))
   @ApiOperation({ summary: 'Upload de prova de entrega' })
   uploadProvaEntrega(
     @CurrentUser() user: User,

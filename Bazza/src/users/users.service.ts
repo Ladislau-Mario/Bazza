@@ -40,6 +40,14 @@ export class UsersService {
     return this.userRepo.findOne({ where: { role: role as UserRole } });
   }
 
+  async listarPorRole(role: string): Promise<User[]> {
+    return this.userRepo.find({ where: { role: role as UserRole } });
+  }
+
+  async listarTodos(): Promise<User[]> {
+    return this.userRepo.find();
+  }
+
   // ── Criar utilizador ──────────────────────────────────────────
 
   async create(dados: {
@@ -146,6 +154,20 @@ export class UsersService {
       });
     }
 
+    // Reativar conta eliminada
+    if (user.status === UserStatus.ELIMINADO) {
+      await this.userRepo.update(user.id, {
+        status: UserStatus.ACTIVE,
+        role: UserRole.CLIENT,
+        nome: decoded.name?.split(' ')[0] || user.nome || 'Utilizador',
+        sobrenome: decoded.name?.split(' ').slice(1).join(' ') || user.sobrenome || '',
+        email: decoded.email || user.email,
+        telefone: undefined as any,
+        telefoneVerificado: false,
+      });
+      user = await this.buscarPorId(user.id);
+    }
+
     return user;
   }
 
@@ -154,12 +176,8 @@ export class UsersService {
   async eliminarConta(userId: string): Promise<void> {
     const user = await this.buscarPorId(userId);
     await this.userRepo.update(userId, {
-      nome: 'Utilizador',
-      sobrenome: 'Removido',
-      email: `removido_${userId}@baza.ao`,
-      status: UserStatus.SUSPENDED,
+      status: UserStatus.ELIMINADO,
       fcmToken: undefined,
     });
-    await this.userRepo.softDelete(userId);
   }
 }

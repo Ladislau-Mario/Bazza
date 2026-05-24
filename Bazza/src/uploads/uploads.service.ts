@@ -164,11 +164,13 @@ export class UploadsService {
 
   async temTodosDocumentosObrigatorios(userId: string): Promise<boolean> {
     const tipos = [
+      TipoUpload.FOTO_PERFIL,
       TipoUpload.DOCUMENTO_BI_FRENTE,
       TipoUpload.DOCUMENTO_BI_VERSO,
       TipoUpload.DOCUMENTO_CARTA_FRENTE,
       TipoUpload.DOCUMENTO_CARTA_VERSO,
       TipoUpload.FOTO_VEICULO,
+      TipoUpload.FOTO_PLACA,
     ];
     const uploads = await this.uploadRepo.find({ where: { userId } });
     return tipos.every((tipo) => uploads.some((u) => u.tipo === tipo));
