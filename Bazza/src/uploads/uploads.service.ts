@@ -21,9 +21,9 @@ export class UploadsService {
   ): Promise<any> {
     if (!file) throw new BadRequestException('Ficheiro não foi enviado');
 
-    const maxSize = 5 * 1024 * 1024; // 5MB
+    const maxSize = 10 * 1024 * 1024; // 10MB
     if (file.size > maxSize) {
-      throw new BadRequestException('Ficheiro excede 5MB');
+      throw new BadRequestException('Ficheiro excede 10MB');
     }
 
     const tiposPermitidos = [

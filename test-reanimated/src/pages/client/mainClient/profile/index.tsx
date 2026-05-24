@@ -94,9 +94,7 @@ export default function Profile() {
       try {
         const formData = new FormData();
         formData.append('file', { uri, type: 'image/jpeg', name: 'foto.jpg' } as any);
-        await api.post('/users/foto-perfil', formData, {
-          headers: { 'Content-Type': 'multipart/form-data' },
-        });
+        await api.post('/users/foto-perfil', formData);
       } catch (e) {
         console.warn('Foto não guardada no servidor, mas actualizada localmente');
       }
