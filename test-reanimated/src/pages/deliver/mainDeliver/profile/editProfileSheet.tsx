@@ -57,9 +57,7 @@ export default function EditProfileSheet({ profile, onSave, onCancel }: Props) {
         const ext = filename.split('.').pop()?.toLowerCase() || 'jpg';
         const mime = ext === 'png' ? 'image/png' : 'image/jpeg';
         formData.append('file', { uri: photoUri, name: filename, type: mime } as any);
-        await api.post('/users/foto-perfil', formData, {
-          headers: { 'Content-Type': 'multipart/form-data' },
-        });
+        await api.post('/users/foto-perfil', formData);
       }
 
       setSaving(false);
