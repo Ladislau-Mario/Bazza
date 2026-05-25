@@ -7,9 +7,11 @@ import {
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import * as admin from 'firebase-admin';
+import * as jwt from 'jsonwebtoken';
 import { UsersService } from '../../users/users.service';
 
 export const IS_PUBLIC_KEY = 'isPublic';
+const JWT_SECRET = process.env.JWT_SECRET || 'baza_admin_jwt_secret_2026';
 
 @Injectable()
 export class FirebaseAuthGuard implements CanActivate {
@@ -35,7 +37,21 @@ export class FirebaseAuthGuard implements CanActivate {
 
     const token = authHeader.replace('Bearer ', '');
 
-    // Suporte a tokens de admin simples (formato: admin_token_<userId>)
+    // Verificar JWT de admin primeiro (tokens admin agora são JWT assinados)
+    try {
+      const decoded = jwt.verify(token, JWT_SECRET) as { userId: string; role: string };
+      if (decoded.role === 'admin') {
+        const user = await this.usersService.buscarPorId(decoded.userId);
+        if (user && user.role === 'admin') {
+          request.user = user;
+          return true;
+        }
+      }
+    } catch {
+      // Não é JWT válido — tentar como Firebase token abaixo
+    }
+
+    // Suporte retroativo a tokens admin legados (formato: admin_token_<userId>)
     if (token.startsWith('admin_token_')) {
       const userId = token.replace('admin_token_', '');
       try {

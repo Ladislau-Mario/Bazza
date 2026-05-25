@@ -28,17 +28,24 @@ export class UploadsService {
 
     const tiposPermitidos = [
       'image/jpeg',
+      'image/jpg',
       'image/png',
       'image/gif',
+      'image/webp',
+      'image/heic',
+      'image/heif',
+      'image/bmp',
       'application/pdf',
     ];
     if (!tiposPermitidos.includes(file.mimetype)) {
-      throw new BadRequestException(`Tipo '${file.mimetype}' não permitido. Use JPG, PNG, GIF ou PDF`);
+      throw new BadRequestException(`Tipo '${file.mimetype}' não permitido. Use JPG, PNG, GIF, WebP ou PDF`);
     }
 
     if (!file.buffer || file.buffer.length === 0) {
       throw new BadRequestException('Ficheiro está vazio');
     }
+
+    console.log(`[Upload] ${tipo} user=${userId} size=${file.size} mime=${file.mimetype} name=${file.originalname}`);
 
     // Substituir se já existe
     const existente = await this.uploadRepo.findOne({ where: { userId, tipo } });

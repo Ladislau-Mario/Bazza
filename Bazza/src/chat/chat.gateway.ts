@@ -6,6 +6,7 @@ import { Server, Socket } from 'socket.io';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { MensagemChat } from './entities/mensagem.entity';
+import * as admin from 'firebase-admin';
 
 @WebSocketGateway({ cors: { origin: '*' }, namespace: '/chat' })
 export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
@@ -16,14 +17,32 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     private mensagemRepo: Repository<MensagemChat>,
   ) {}
 
-  handleConnection(client: Socket) {
+  async handleConnection(client: Socket) {
     console.log(`[Chat] Cliente conectado: ${client.id}`);
     try {
       const userId = client.handshake.auth?.userId || client.handshake.query?.userId;
+      const token = client.handshake.auth?.token || client.handshake.query?.token;
+
       if (!userId) {
         client.disconnect();
         return;
       }
+
+      // Verificar token Firebase se fornecido
+      if (token) {
+        try {
+          const decoded = await admin.auth().verifyIdToken(token as string);
+          // Verificar que o token corresponde ao userId
+          if (decoded.uid !== userId) {
+            console.warn(`[Chat] Token não corresponde ao userId: ${decoded.uid} !== ${userId}`);
+            client.disconnect();
+            return;
+          }
+        } catch {
+          console.warn('[Chat] Token Firebase inválido, a permitir conexão com userId apenas');
+        }
+      }
+
       client.join(`user_${userId}`);
       (client as any).userId = userId;
       console.log(`[Chat] Utilizador ${userId} entrou na sala user_${userId}`);
@@ -68,7 +87,8 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     },
     @ConnectedSocket() client: Socket,
   ) {
-    const remetenteId = data.remetenteId ?? data.senderId;
+    const authUserId = (client as any).userId;
+    const remetenteId = authUserId || (data.remetenteId ?? data.senderId);
     const remetenteTipo = data.remetenteTipo ?? data.senderType;
     const texto = data.texto ?? data.text;
 

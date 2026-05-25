@@ -31,9 +31,10 @@ function waitForAuth(): Promise<string> {
 }
 
 export async function getSocket(): Promise<Socket> {
-  refCount++;
-
-  if (socket) return socket;
+  if (socket) {
+    refCount++;
+    return socket;
+  }
 
   const userId = await waitForAuth();
   const token = await getIdToken();
@@ -52,7 +53,6 @@ export async function getSocket(): Promise<Socket> {
 
   socket.on('connect', () => {
     console.log('[Socket] Connected:', socket?.id);
-    // Registar o utilizador na sua sala pessoal
     if (userId) {
       socket?.emit('user:join', { userId });
     }
@@ -66,10 +66,8 @@ export async function getSocket(): Promise<Socket> {
     console.warn('[Socket] Connection error:', err?.message || err);
   });
 
-  if (!socket) {
-    throw new Error('[Socket] Failed to create socket instance');
-  }
-
+  refCount++;
+  console.log('[Socket] New socket (refs:', refCount, ')');
   return socket;
 }
 

@@ -70,14 +70,22 @@ export const enviarDocumentosMotoqueiro = async (docs: {
   const erros: string[] = [];
 
   for (const { uri, tipo, mime } of mapa) {
-    if (!uri) continue;
+    if (!uri) {
+      console.log(`[Upload] Ignorado ${tipo} — sem URI`);
+      continue;
+    }
     try {
-      await enviarFicheiro(tipo, uri, mime);
+      console.log(`[Upload] Enviando ${tipo} uri=${uri.substring(0, 50)}... mime=${mime}`);
+      const result = await enviarFicheiro(tipo, uri, mime);
+      console.log(`[Upload] OK ${tipo}:`, JSON.stringify(result).substring(0, 100));
     } catch (e: any) {
-      console.warn(`[Upload] Falha em ${tipo}:`, e?.response?.data || e?.message || e);
+      const errMsg = e?.response?.data?.message || e?.response?.data || e?.message || String(e);
+      console.warn(`[Upload] Falha em ${tipo}:`, errMsg);
+      if (e?.response?.status) console.warn(`[Upload] Status: ${e.response.status}`);
       erros.push(tipo);
     }
   }
 
+  console.log(`[Upload] Resultado: ${erros.length === 0 ? 'TODOS OK' : `${erros.length} falhas: ${erros.join(', ')}`}`);
   return { sucesso: erros.length === 0, erros };
 };

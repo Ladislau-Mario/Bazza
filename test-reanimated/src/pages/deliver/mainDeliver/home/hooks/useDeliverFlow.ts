@@ -2,6 +2,7 @@
 // Hook do motoqueiro — usa a API real do backend (Bazza).
 
 import { useState, useCallback, useRef, useEffect } from 'react';
+import { Alert } from 'react-native';
 import api from '../../../../../components/modules/services/api/api';
 import { getSocket, releaseSocket } from '../../../../../components/modules/services/socket';
 
@@ -203,37 +204,52 @@ export function useDeliverFlow() {
         acquiredSocket = true;
         socketRef.current = socket;
         socket.on('chat:received', (msg: any) => {
-          const isOwn = msg.remetenteTipo === 'motoqueiro' || msg.senderType === 'motoqueiro';
-          const mapped: ChatMessage = {
-            id: msg.id,
-            pedidoId: msg.pedidoId,
-            text: msg.texto || msg.text || '',
-            sender: isOwn ? 'deliver' : 'client',
-            timestamp: msg.criadoEm || msg.timestamp || new Date(),
-            read: msg.lida ?? msg.read ?? false,
-          };
-          setChatMessages(prev => {
-            if (prev.some(m => m.id === mapped.id)) return prev;
-            // Dedup: evitar duplicata do echo socket (mensagem local já existe com texto igual)
-            if (isOwn && prev.some(m => m.sender === 'deliver' && m.text === mapped.text)) return prev;
-            return [...prev, mapped];
-          });
+          try {
+            if (!msg) return;
+            const isOwn = msg.remetenteTipo === 'motoqueiro' || msg.senderType === 'motoqueiro';
+            const mapped: ChatMessage = {
+              id: msg.id || `msg_${Date.now()}_${Math.random().toString(36).slice(2)}`,
+              pedidoId: msg.pedidoId,
+              text: msg.texto || msg.text || '',
+              sender: isOwn ? 'deliver' : 'client',
+              timestamp: msg.criadoEm || msg.timestamp || new Date(),
+              read: msg.lida ?? msg.read ?? false,
+            };
+            setChatMessages(prev => {
+              if (!Array.isArray(prev)) return [mapped];
+              if (mapped.id && prev.some(m => m?.id === mapped.id)) return prev;
+              if (isOwn && prev.some(m => m?.sender === 'deliver' && m?.text === mapped.text)) return prev;
+              return [...prev, mapped];
+            });
+          } catch (e) {
+            console.warn('[DELIVER] Erro ao processar mensagem:', e);
+          }
         });
         socket.on('order:new', (data: any) => {
-          if (phaseRef.current === 'orders') {
+          try {
+            if (!data || phaseRef.current !== 'orders') return;
             const pedido = data?.pedido ?? data;
+            if (!pedido?.id) return;
             setOrders(prev => {
+              if (!Array.isArray(prev)) return [];
               const normalized = normalizeOrder(pedido);
               if (!normalized.id || prev.some(order => order.id === normalized.id)) return prev;
               return [normalized, ...prev];
             });
             api.get('/pedidos/disponiveis').then(res => setOrders((res.data || []).map(normalizeOrder))).catch(() => {});
+          } catch (e) {
+            console.warn('[DELIVER] Erro ao processar novo pedido:', e);
           }
         });
         socket.on('order:status_update', (data: any) => {
-          const currentOrder = activeOrderRef.current;
-          if (currentOrder && data.pedidoId === currentOrder.id) {
-            setActiveOrder(prev => prev ? { ...prev, status: data.status } : null);
+          try {
+            if (!data) return;
+            const currentOrder = activeOrderRef.current;
+            if (currentOrder && data.pedidoId === currentOrder.id) {
+              setActiveOrder(prev => prev ? { ...prev, status: data.status } : null);
+            }
+          } catch (e) {
+            console.warn('[DELIVER] Erro ao processar actualização:', e);
           }
         });
       } catch {}
@@ -296,21 +312,41 @@ export function useDeliverFlow() {
   const handleAcceptOrder = useCallback(async (order: DeliveryOrder, price: number, currentLocation: LatLng | null) => {
     if (!isOnline) return;
     try {
+      console.log('[ACCEPT_ORDER] A enviar pedido:', order.id, 'preco:', price);
       const res = await api.patch(`/pedidos/${order.id}/aceitar`, { precoAcordado: price });
+      console.log('[ACCEPT_ORDER] Resposta:', JSON.stringify(res.data).substring(0, 200));
+
       const pedido = res.data;
-      setActiveOrder(pedido ? normalizeOrder({ ...order, ...pedido, precoFinal: price }) : { ...order, precoFinal: price, status: 'a_caminho_recolha' });
+      const normalized = pedido
+        ? normalizeOrder({ ...order, ...pedido, precoFinal: price })
+        : { ...order, precoFinal: price, status: 'a_caminho_recolha' };
+
+      console.log('[ACCEPT_ORDER] Status normalizado:', normalized.status);
+      setActiveOrder(normalized);
       setAgreedPrice(price);
       setSimDistance(Number(order.distanciaKm));
-      const from = currentLocation ?? order.pickupCoords;
-      setRouteCoords(await fetchRealRoute(from, order.pickupCoords));
+
+      // Calcular rota (não bloqueante)
+      try {
+        const from = currentLocation ?? order.pickupCoords;
+        const route = await fetchRealRoute(from, order.pickupCoords);
+        setRouteCoords(route);
+      } catch (routeErr) {
+        console.warn('[ACCEPT_ORDER] Erro na rota, usando fallback');
+        setRouteCoords([currentLocation ?? order.pickupCoords, order.pickupCoords]);
+      }
+
       setPhase('pickup');
       setSelectedOrderForDetails(null);
       stopOrdersPolling();
 
       // Entrar na sala do pedido para receber atualizações em tempo real
       socketRef.current?.emit('order:join', { pedidoId: order.id });
+      console.log('[ACCEPT_ORDER] Concluído com sucesso');
     } catch (err: any) {
-      console.warn('Erro ao aceitar pedido:', err?.response?.data);
+      const errMsg = err?.response?.data?.message || err?.response?.data || err?.message;
+      console.warn('[ACCEPT_ORDER] Erro:', errMsg);
+      Alert.alert('Erro', 'Não foi possível aceitar o pedido. Tente novamente.');
     }
   }, [isOnline, stopOrdersPolling]);
 
@@ -327,14 +363,19 @@ export function useDeliverFlow() {
   const handleCancel = useCallback(async () => {
     if (!activeOrder) return;
     try {
+      console.log('[CANCEL] A cancelar pedido:', activeOrder.id);
       await api.patch(`/pedidos/${activeOrder.id}/cancelar`, { motivo: 'Cancelado pelo motoqueiro' });
-    } catch {}
+      console.log('[CANCEL] Pedido cancelado com sucesso');
+    } catch (err: any) {
+      console.warn('[CANCEL] Erro:', err?.response?.data?.message || err?.message);
+    }
     setActiveOrder(null);
     setRouteCoords([]);
     setSimDistance(0);
     setOrders([]);
     setIsOnline(false);
     setPhase('idle');
+    console.log('[CANCEL] Estado resetado');
   }, [activeOrder]);
 
   // ── Iniciar pausa ─────────────────────────────────────────────────────────

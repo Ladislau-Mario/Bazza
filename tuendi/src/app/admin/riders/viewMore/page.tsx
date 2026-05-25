@@ -156,6 +156,11 @@ export default function ViewMorePage() {
           <TabPanel px={0}>
             <Stack gap={6}>
               <Box bg="bg.card" border="2px" borderColor="border.default" rounded="xl" p={6}>
+                <Text fontWeight="bold" fontSize="lg" mb={1}>Foto de Perfil</Text>
+                <Text fontSize="sm" color="text.secondary" mb={4}>Imagem enviada pelo entregador</Text>
+                <Image src={getUploadUrl("foto_perfil")} alt="Foto Perfil" rounded="md" w="200px" h="200px" objectFit="cover" fallbackSrc="https://via.placeholder.com/200x200?text=Sem+foto" />
+              </Box>
+              <Box bg="bg.card" border="2px" borderColor="border.default" rounded="xl" p={6}>
                 <Text fontWeight="bold" fontSize="lg" mb={1}>Bilhete de Identidade</Text>
                 <Text fontSize="sm" color="text.secondary" mb={4}>Nº {rider.user?.numeroDocumento}</Text>
                 <SimpleGrid columns={2} gap={4}>
@@ -192,6 +197,8 @@ export default function ViewMorePage() {
                   </SimpleGrid>
                   <Text fontSize="sm" color="text.secondary" mb={2}>Foto do veículo</Text>
                   <Image src={getUploadUrl("foto_veiculo")} alt="Veículo" rounded="md" w="100%" h="220px" objectFit="cover" fallbackSrc="https://via.placeholder.com/800x220?text=Sem+imagem" />
+                  <Text fontSize="sm" color="text.secondary" mt={4} mb={2}>Foto da placa</Text>
+                  <Image src={getUploadUrl("foto_placa")} alt="Placa" rounded="md" w="100%" h="180px" objectFit="cover" fallbackSrc="https://via.placeholder.com/400x180?text=Sem+imagem" />
                 </>
               ) : (
                 <Text color="text.secondary">Sem informação de veículo.</Text>

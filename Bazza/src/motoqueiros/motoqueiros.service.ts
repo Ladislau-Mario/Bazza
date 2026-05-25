@@ -194,12 +194,12 @@ export class MotoqueirosService {
         'u.criadoEm',
       ])
       .orderBy('u.criadoEm', 'DESC')
-      .getRawMany();
+      .getMany();
 
     return {
       motoqueiro,
       uploads,
-      todosDocumentosAprovados: uploads.every((u) => u.u_status === 'aprovado'),
+      todosDocumentosAprovados: uploads.every((u) => u.status === 'aprovado'),
     };
   }
 

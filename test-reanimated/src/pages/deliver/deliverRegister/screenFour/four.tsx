@@ -58,23 +58,8 @@ export default function DeliverRegisterFour({ navigation, route }: any) {
 
     setLoading(true);
     try {
-      // PASSO 1: Registar motoqueiro + veículo no backend
-      await api.post('/motoqueiros/completar-perfil', {
-        nome:           dataFromStepThree.nome,
-        sobrenome:      dataFromStepThree.sobrenome,
-        email:          dataFromStepThree.email,
-        dataNascimento: dataFromStepThree.dataNascimento,
-        numeroBI:       dataFromStepThree.numIdentificacao,
-        numeroCarta:    dataFromStepThree.numLicenca,
-        morada:         dataFromStepThree.morada || '',
-        marca,
-        modelo,
-        placa,
-        corPrincipal:   cor,
-        ano:            new Date().getFullYear(),
-      });
-
-      // PASSO 2: Enviar todos os documentos/fotos
+      // PASSO 1: Enviar todos os documentos/fotos PRIMEIRO
+      console.log('[Register4] Iniciando uploads de documentos...');
       const { sucesso, erros } = await enviarDocumentosMotoqueiro({
         fotoPerfil:     dataFromStepThree.fotoPerfil,
         fotoPerfilMime: dataFromStepThree.fotoPerfilMime,
@@ -91,13 +76,37 @@ export default function DeliverRegisterFour({ navigation, route }: any) {
         certFrente,
         certFrenteMime,
       });
+      console.log('[Register4] Upload resultado:', sucesso ? 'OK' : `Falhas: ${erros.join(', ')}`);
+
+      // Se TODOS os uploads falharam, não continuar o registo
+      if (!sucesso && erros.length >= 7) {
+        Alert.alert(
+          'Erro nos uploads',
+          'Nenhum documento foi enviado. Verifique a sua conexão e tente novamente.',
+        );
+        setLoading(false);
+        return;
+      }
 
       if (!sucesso) {
-        Alert.alert(
-          'Alguns uploads falharam',
-          `Os seguintes documentos não foram enviados: ${erros.join(', ')}. Pode tentar novamente mais tarde.`,
-        );
+        console.warn('[Register4] Alguns uploads falharam:', erros.join(', '));
       }
+
+      // PASSO 2: Registar motoqueiro + veículo no backend
+      await api.post('/motoqueiros/completar-perfil', {
+        nome:           dataFromStepThree.nome,
+        sobrenome:      dataFromStepThree.sobrenome,
+        email:          dataFromStepThree.email,
+        dataNascimento: dataFromStepThree.dataNascimento,
+        numeroBI:       dataFromStepThree.numIdentificacao,
+        numeroCarta:    dataFromStepThree.numLicenca,
+        morada:         dataFromStepThree.morada || '',
+        marca,
+        modelo,
+        placa,
+        corPrincipal:   cor,
+        ano:            new Date().getFullYear(),
+      });
 
       // PASSO 3: Actualizar sessão local com role deliver
       const sessao = await authService.obterSessao();

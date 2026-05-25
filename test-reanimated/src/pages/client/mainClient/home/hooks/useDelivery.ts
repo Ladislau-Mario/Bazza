@@ -153,27 +153,31 @@ export function useDelivery() {
         socket.emit('order:join', { pedidoId: activeOrder.id });
 
         socket.on('order:status_update', (data: any) => {
-          const { status, motoqueiro: motoqueiroSocket } = data;
-          setDeliveryStatus(status);
+          if (!mounted) return;
+          try {
+            const { status, motoqueiro: motoqueiroSocket } = data;
+            setDeliveryStatus(status);
 
-          // Atualizar activeOrder sem sobrescrever motoqueiro com string UUID
-          setActiveOrder(prev => {
-            if (!prev) return prev;
-            const update: any = { ...data };
-            delete update.motoqueiroId;
-            if (motoqueiroSocket && typeof motoqueiroSocket === 'object') {
-              update.motoqueiro = motoqueiroSocket;
-            } else {
-              delete update.motoqueiro;
+            setActiveOrder(prev => {
+              if (!prev) return prev;
+              const update: any = { ...data };
+              delete update.motoqueiroId;
+              if (motoqueiroSocket && typeof motoqueiroSocket === 'object') {
+                update.motoqueiro = motoqueiroSocket;
+              } else {
+                delete update.motoqueiro;
+              }
+              return { ...prev, ...update };
+            });
+
+            if (motoqueiroSocket || status === 'motoqueiro_atribuido' || status === 'a_caminho_recolha') {
+              setSearching(false);
             }
-            return { ...prev, ...update };
-          });
-
-          if (motoqueiroSocket || status === 'motoqueiro_atribuido' || status === 'a_caminho_recolha') {
-            setSearching(false);
-          }
-          if (status === 'entregue' || status === 'cancelado') {
-            stopPolling();
+            if (status === 'entregue' || status === 'cancelado') {
+              stopPolling();
+            }
+          } catch (e) {
+            console.warn('[useDelivery] Erro ao processar status_update:', e);
           }
         });
 

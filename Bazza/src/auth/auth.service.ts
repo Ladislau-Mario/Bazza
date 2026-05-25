@@ -2,7 +2,10 @@ import { Injectable, BadRequestException, ForbiddenException, Inject, Unauthoriz
 import { UsersService } from '../users/users.service';
 import { PreferenciasService } from '../preferencias/preferencias.service';
 import * as admin from 'firebase-admin';
+import * as jwt from 'jsonwebtoken';
 import { FIREBASE_APP } from '../firebase/firebase.module';
+
+const JWT_SECRET = process.env.JWT_SECRET || 'baza_admin_jwt_secret_2026';
 
 interface OTPCache {
   codigo: string;
@@ -150,8 +153,12 @@ export class AuthService {
       user.role = 'admin' as any;
     }
 
-    // Gerar token simples para o admin panel
-    const token = `admin_token_${user.id}`;
+    // Gerar JWT token para o admin panel
+    const token = jwt.sign(
+      { userId: user.id, role: 'admin' },
+      JWT_SECRET,
+      { expiresIn: '7d' },
+    );
 
     return {
       message: 'Login admin bem-sucedido',

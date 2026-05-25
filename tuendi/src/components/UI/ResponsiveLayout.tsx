@@ -1,10 +1,11 @@
 "use client";
 
-import { Box, Flex, IconButton, useDisclosure, Drawer, DrawerOverlay, DrawerContent, DrawerBody, useBreakpointValue } from "@chakra-ui/react";
-import { ReactNode } from "react";
+import { Box, Flex, IconButton, useDisclosure, Drawer, DrawerOverlay, DrawerContent, DrawerBody, useBreakpointValue, Spinner, Center } from "@chakra-ui/react";
+import { ReactNode, useEffect, useState } from "react";
 import { RiMenuLine } from "react-icons/ri";
 import { Header } from "@/components/UI/Header";
 import { Sidebar } from "@/components/UI/Sidebar";
+import { useRouter } from "next/navigation";
 
 interface ResponsiveLayoutProps {
   children: ReactNode;
@@ -13,6 +14,25 @@ interface ResponsiveLayoutProps {
 export function ResponsiveLayout({ children }: ResponsiveLayoutProps) {
   const { isOpen, onOpen, onClose } = useDisclosure();
   const isMobile = useBreakpointValue({ base: true, md: false }) ?? false;
+  const router = useRouter();
+  const [authorized, setAuthorized] = useState(false);
+
+  useEffect(() => {
+    const token = localStorage.getItem("baza_admin_token");
+    if (!token) {
+      router.replace("/");
+    } else {
+      setAuthorized(true);
+    }
+  }, [router]);
+
+  if (!authorized) {
+    return (
+      <Center h="100vh">
+        <Spinner size="xl" color="purple.500" />
+      </Center>
+    );
+  }
 
   return (
     <Flex direction="column" h="100vh">

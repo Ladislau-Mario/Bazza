@@ -220,9 +220,15 @@ export function CurvedBottomTabs({
   navigation,
   gradients = ["#1F2933", "#2D3748"],
 }: BottomTabBarProps & CurvedTabBarNavigationProps) {
-  const tabs: Tab[] = state.routes.map((route, index) => {
+  // Filtrar rotas escondidas (tabBarButton: () => null)
+  const visibleRoutes = state.routes.filter((route) => {
     const { options } = descriptors[route.key];
-    const isActive = state.index === index;
+    return options.tabBarButton == null;
+  });
+
+  const tabs: Tab[] = visibleRoutes.map((route) => {
+    const { options } = descriptors[route.key];
+    const isActive = state.routes[state.index].key === route.key;
     return {
       id: route.key,
       title:
@@ -241,14 +247,19 @@ export function CurvedBottomTabs({
     };
   });
 
+  // Calcular índice ativo dentro das rotas visíveis
+  const activeVisibleIndex = visibleRoutes.findIndex(
+    (r) => r.key === state.routes[state.index].key,
+  );
+
   const handlePress = (index: number) => {
-    const route = state.routes[index];
+    const route = visibleRoutes[index];
     const event = navigation.emit({
       type: "tabPress",
       target: route.key,
       canPreventDefault: true,
     });
-    if (state.index !== index && !event.defaultPrevented) {
+    if (state.routes[state.index].key !== route.key && !event.defaultPrevented) {
       navigation.navigate(route.name, route.params);
     }
   };
@@ -256,7 +267,7 @@ export function CurvedBottomTabs({
   return (
     <CurvedBottomTabsCore
       tabs={tabs}
-      currentIndex={state.index}
+      currentIndex={activeVisibleIndex >= 0 ? activeVisibleIndex : 0}
       onPress={handlePress}
       gradient={gradients as [string, string]}
     />

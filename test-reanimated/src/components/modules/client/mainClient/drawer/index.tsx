@@ -12,8 +12,6 @@ import { signOut } from 'firebase/auth';
 import { auth } from '../../../../../../firebaseConfig';
 import { authService } from '../../../services/api/authService';
 import api from '../../../services/api/api';
-import { useRealtimeNotifications } from '../../../../../hooks/useRealtimeNotifications';
-import ToastNotification from '../../../../common/toastNotification';
 
 const menuItems = [
   { label: 'Entregas', icon: 'flame', lib: 'Ionicons', route: 'Home' },
@@ -28,9 +26,6 @@ const menuItems = [
 export default function DrawerContent(props: any) {
   const { navigation, state } = props;
   const currentRoute = state?.routes[state.index]?.name;
-
-  // Notificações em tempo real via socket
-  const { toast, hideToast } = useRealtimeNotifications();
 
   const [userName, setUserName] = useState('Utilizador');
   const [userInitials, setUserInitials] = useState('U');
@@ -86,17 +81,6 @@ export default function DrawerContent(props: any) {
 
   return (
     <View style={styles.container}>
-      {/* TOAST NOTIFICATION */}
-      {toast && (
-        <ToastNotification
-          titulo={toast.titulo}
-          mensagem={toast.mensagem}
-          tipo={toast.tipo}
-          visible={true}
-          onHide={hideToast}
-        />
-      )}
-
       {/* HEADER */}
       <View style={styles.header}>
         <View style={styles.avatar}>

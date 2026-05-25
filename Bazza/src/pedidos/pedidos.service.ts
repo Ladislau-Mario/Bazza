@@ -108,7 +108,7 @@ export class PedidosService {
     }
 
     pedido.motoqueiroId = deliver.id;
-    pedido.status = StatusPedido.MOTOQUEIRO_ATRIBUIDO;
+    pedido.status = StatusPedido.A_CAMINHO_RECOLHA;
     pedido.atribuidoEm = new Date();
     await this.repo.save(pedido);
 

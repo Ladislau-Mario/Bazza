@@ -35,6 +35,7 @@ export class UploadsController {
     @UploadedFile() file: Express.Multer.File,
   ) {
     if (!file) throw new BadRequestException('Ficheiro não foi enviado');
+    console.log(`[Upload] foto_perfil user=${user.id} size=${file.size} mime=${file.mimetype}`);
     return this.service.fazer(user.id, file, TipoUpload.FOTO_PERFIL);
   }
 

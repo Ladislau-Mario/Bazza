@@ -367,8 +367,8 @@ export default function HomeClient() {
     if (searching) {
       searchLoop.current = Animated.loop(
         Animated.sequence([
-          Animated.timing(searchAnim, {toValue:1,duration:900,useNativeDriver:true,easing:Easing.inOut(Easing.ease)}),
-          Animated.timing(searchAnim, {toValue:0,duration:900,useNativeDriver:true,easing:Easing.inOut(Easing.ease)}),
+          Animated.timing(searchAnim, {toValue:1,duration:900,useNativeDriver:false,easing:Easing.inOut(Easing.ease)}),
+          Animated.timing(searchAnim, {toValue:0,duration:900,useNativeDriver:false,easing:Easing.inOut(Easing.ease)}),
         ])
       );
       searchLoop.current.start();

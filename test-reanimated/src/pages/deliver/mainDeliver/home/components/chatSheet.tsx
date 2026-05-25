@@ -37,6 +37,7 @@ export function ChatSheet({ visible, onClose, messages, onSend, clientName }: Pr
   };
 
   const renderMessage = ({ item }: { item: ChatMessage }) => {
+    if (!item || !item.id) return null;
     const isDeliver = item.sender === 'deliver';
     const isSystem = item.id.startsWith('sys_');
 
@@ -104,7 +105,7 @@ export function ChatSheet({ visible, onClose, messages, onSend, clientName }: Pr
         <FlatList
           ref={listRef}
           data={messages}
-          keyExtractor={m => m.id}
+          keyExtractor={m => m?.id ?? `msg_${Math.random()}`}
           renderItem={renderMessage}
           contentContainerStyle={s.list}
           showsVerticalScrollIndicator={false}
