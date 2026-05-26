@@ -4,7 +4,8 @@ import { api } from "@/services/api";
 import {
   Flex, Avatar, Box, Divider, Button, Text,
   HStack, Stack, Tag, TagLabel, TagLeftIcon,
-  Image, SimpleGrid, Spinner, Center,
+  SimpleGrid, Spinner, Center, IconButton,
+  Modal, ModalOverlay, ModalContent, ModalBody, ModalCloseButton,
   Tabs, TabList, Tab, TabPanels, TabPanel,
   Breadcrumb, BreadcrumbItem, BreadcrumbLink,
 } from "@chakra-ui/react";
@@ -12,6 +13,7 @@ import { useState, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
 import { RiCircleFill } from "react-icons/ri";
 import { ResponsiveLayout } from "@/components/UI/ResponsiveLayout";
+import { AuthImage } from "@/components/UI/AuthImage";
 import { MdOutlineKeyboardDoubleArrowRight } from "react-icons/md";
 
 const statusColor: Record<string, string> = {
@@ -33,6 +35,8 @@ export default function ViewMorePage() {
   const [rider, setRider] = useState<any>(null);
   const [uploads, setUploads] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [selectedDoc, setSelectedDoc] = useState<string | null>(null);
+  const [selectedDocLabel, setSelectedDocLabel] = useState<string>("");
 
   useEffect(() => {
     if (!id) return;
@@ -76,7 +80,15 @@ export default function ViewMorePage() {
   const getUploadUrl = (tipo: string) => {
     const upload = uploads.find((u: any) => u.tipo === tipo);
     if (!upload) return undefined;
-    return `${api.defaults.baseURL}/admin/documentos/${upload.id}/imagem`;
+    return `/admin/documentos/${upload.id}/imagem`;
+  };
+
+  const openDoc = (tipo: string, label: string) => {
+    const url = getUploadUrl(tipo);
+    if (url) {
+      setSelectedDoc(url);
+      setSelectedDocLabel(label);
+    }
   };
   const veiculo = rider.veiculos?.[0] || rider.veiculo || null;
 
@@ -158,21 +170,23 @@ export default function ViewMorePage() {
               <Box bg="bg.card" border="2px" borderColor="border.default" rounded="xl" p={6}>
                 <Text fontWeight="bold" fontSize="lg" mb={1}>Foto de Perfil</Text>
                 <Text fontSize="sm" color="text.secondary" mb={4}>Imagem enviada pelo entregador</Text>
-                <Image src={getUploadUrl("foto_perfil")} alt="Foto Perfil" rounded="md" w="200px" h="200px" objectFit="cover" fallbackSrc="https://via.placeholder.com/200x200?text=Sem+foto" />
+                <Box cursor="pointer" onClick={() => openDoc("foto_perfil", "Foto de Perfil")} _hover={{ opacity: 0.85 }} transition="opacity 0.2s">
+                  <AuthImage url={getUploadUrl("foto_perfil")} alt="Foto Perfil" rounded="md" w="200px" h="200px" objectFit="cover" />
+                </Box>
               </Box>
               <Box bg="bg.card" border="2px" borderColor="border.default" rounded="xl" p={6}>
                 <Text fontWeight="bold" fontSize="lg" mb={1}>Bilhete de Identidade</Text>
                 <Text fontSize="sm" color="text.secondary" mb={4}>Nº {rider.user?.numeroDocumento}</Text>
                 <SimpleGrid columns={2} gap={4}>
-                  <Box><Text fontSize="sm" color="text.secondary" mb={2}>Frente</Text><Image src={getUploadUrl("documento_bi_frente")} alt="BI Frente" rounded="md" w="100%" h="180px" objectFit="cover" fallbackSrc="https://via.placeholder.com/400x180?text=Sem+imagem" /></Box>
-                  <Box><Text fontSize="sm" color="text.secondary" mb={2}>Verso</Text><Image src={getUploadUrl("documento_bi_verso")} alt="BI Verso" rounded="md" w="100%" h="180px" objectFit="cover" fallbackSrc="https://via.placeholder.com/400x180?text=Sem+imagem" /></Box>
+                  <Box><Text fontSize="sm" color="text.secondary" mb={2}>Frente</Text><Box cursor="pointer" onClick={() => openDoc("documento_bi_frente", "BI - Frente")} _hover={{ opacity: 0.85 }} transition="opacity 0.2s"><AuthImage url={getUploadUrl("documento_bi_frente")} alt="BI Frente" rounded="md" w="100%" h="180px" objectFit="cover" /></Box></Box>
+                  <Box><Text fontSize="sm" color="text.secondary" mb={2}>Verso</Text><Box cursor="pointer" onClick={() => openDoc("documento_bi_verso", "BI - Verso")} _hover={{ opacity: 0.85 }} transition="opacity 0.2s"><AuthImage url={getUploadUrl("documento_bi_verso")} alt="BI Verso" rounded="md" w="100%" h="180px" objectFit="cover" /></Box></Box>
                 </SimpleGrid>
               </Box>
               <Box bg="bg.card" border="2px" borderColor="border.default" rounded="xl" p={6}>
                 <Text fontWeight="bold" fontSize="lg" mb={4}>Carta de Condução</Text>
                 <SimpleGrid columns={2} gap={4}>
-                  <Box><Text fontSize="sm" color="text.secondary" mb={2}>Frente</Text><Image src={getUploadUrl("documento_carta_frente")} alt="Carta Frente" rounded="md" w="100%" h="180px" objectFit="cover" fallbackSrc="https://via.placeholder.com/400x180?text=Sem+imagem" /></Box>
-                  <Box><Text fontSize="sm" color="text.secondary" mb={2}>Verso</Text><Image src={getUploadUrl("documento_carta_verso")} alt="Carta Verso" rounded="md" w="100%" h="180px" objectFit="cover" fallbackSrc="https://via.placeholder.com/400x180?text=Sem+imagem" /></Box>
+                  <Box><Text fontSize="sm" color="text.secondary" mb={2}>Frente</Text><Box cursor="pointer" onClick={() => openDoc("documento_carta_frente", "Carta - Frente")} _hover={{ opacity: 0.85 }} transition="opacity 0.2s"><AuthImage url={getUploadUrl("documento_carta_frente")} alt="Carta Frente" rounded="md" w="100%" h="180px" objectFit="cover" /></Box></Box>
+                  <Box><Text fontSize="sm" color="text.secondary" mb={2}>Verso</Text><Box cursor="pointer" onClick={() => openDoc("documento_carta_verso", "Carta - Verso")} _hover={{ opacity: 0.85 }} transition="opacity 0.2s"><AuthImage url={getUploadUrl("documento_carta_verso")} alt="Carta Verso" rounded="md" w="100%" h="180px" objectFit="cover" /></Box></Box>
                 </SimpleGrid>
               </Box>
             </Stack>
@@ -196,9 +210,13 @@ export default function ViewMorePage() {
                     </Box>
                   </SimpleGrid>
                   <Text fontSize="sm" color="text.secondary" mb={2}>Foto do veículo</Text>
-                  <Image src={getUploadUrl("foto_veiculo")} alt="Veículo" rounded="md" w="100%" h="220px" objectFit="cover" fallbackSrc="https://via.placeholder.com/800x220?text=Sem+imagem" />
+                  <Box cursor="pointer" onClick={() => openDoc("foto_veiculo", "Foto do Veículo")} _hover={{ opacity: 0.85 }} transition="opacity 0.2s">
+                    <AuthImage url={getUploadUrl("foto_veiculo")} alt="Veículo" rounded="md" w="100%" h="220px" objectFit="cover" />
+                  </Box>
                   <Text fontSize="sm" color="text.secondary" mt={4} mb={2}>Foto da placa</Text>
-                  <Image src={getUploadUrl("foto_placa")} alt="Placa" rounded="md" w="100%" h="180px" objectFit="cover" fallbackSrc="https://via.placeholder.com/400x180?text=Sem+imagem" />
+                  <Box cursor="pointer" onClick={() => openDoc("foto_placa", "Foto da Placa")} _hover={{ opacity: 0.85 }} transition="opacity 0.2s">
+                    <AuthImage url={getUploadUrl("foto_placa")} alt="Placa" rounded="md" w="100%" h="180px" objectFit="cover" />
+                  </Box>
                 </>
               ) : (
                 <Text color="text.secondary">Sem informação de veículo.</Text>
@@ -207,6 +225,26 @@ export default function ViewMorePage() {
           </TabPanel>
         </TabPanels>
       </Tabs>
+
+      {/* ── Lightbox Modal ── */}
+      <Modal isOpen={!!selectedDoc} onClose={() => setSelectedDoc(null)} size="4xl" isCentered>
+        <ModalOverlay bg="blackAlpha.800" />
+        <ModalContent bg="gray.900" maxW="900px" maxH="90vh">
+          <ModalCloseButton color="white" zIndex={10} />
+          <ModalBody p={0}>
+            {selectedDoc && (
+              <AuthImage
+                url={selectedDoc}
+                alt={selectedDocLabel}
+                w="100%"
+                maxH="85vh"
+                objectFit="contain"
+                rounded="md"
+              />
+            )}
+          </ModalBody>
+        </ModalContent>
+      </Modal>
     </ResponsiveLayout>
   );
 }

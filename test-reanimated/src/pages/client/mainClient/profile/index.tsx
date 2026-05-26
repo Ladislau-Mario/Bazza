@@ -14,6 +14,7 @@ import { themes } from '../../../../global/themes';
 import { signOut } from 'firebase/auth';
 import { auth } from '../../../../../firebaseConfig';
 import api from '../../../../components/modules/services/api/api';
+import { enviarFicheiro } from '../../../../components/modules/services/api/uploadService';
 import { authService } from '../../../../components/modules/services/api/authService';
 
 type EditField = 'nome' | 'telefone' | 'email' | null;
@@ -92,9 +93,7 @@ export default function Profile() {
       setFotoUri(uri);
       // Enviar ao backend
       try {
-        const formData = new FormData();
-        formData.append('file', { uri, type: 'image/jpeg', name: 'foto.jpg' } as any);
-        await api.post('/users/foto-perfil', formData);
+        await enviarFicheiro('foto-perfil', uri, 'image/jpeg');
       } catch (e) {
         console.warn('Foto não guardada no servidor, mas actualizada localmente');
       }

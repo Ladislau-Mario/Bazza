@@ -41,11 +41,15 @@ export class UsersService {
   }
 
   async listarPorRole(role: string): Promise<User[]> {
-    return this.userRepo.find({ where: { role: role as UserRole } });
+    return this.userRepo.find({ where: { role: role as UserRole, status: 'active' as any } });
   }
 
   async listarTodos(): Promise<User[]> {
-    return this.userRepo.find();
+    return this.userRepo.createQueryBuilder('u')
+      .where('u.status != :eliminado', { eliminado: 'eliminado' })
+      .andWhere('u.status != :suspended', { suspended: 'suspended' })
+      .andWhere('u.role != :admin', { admin: 'admin' })
+      .getMany();
   }
 
   // ── Criar utilizador ──────────────────────────────────────────

@@ -4,38 +4,50 @@ import {
   Box, Flex, Text, Stack, Tag, TagLeftIcon, TagLabel,
   Breadcrumb, BreadcrumbItem, BreadcrumbLink,
   Button, HStack, IconButton, Badge,
-  SimpleGrid, Spinner, Center,
+  Spinner, Center,
 } from "@chakra-ui/react";
 import NextLink from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/services/api";
 import { usePreferences } from "@/contexts/PreferencesContext";
 import { RiCircleFill, RiDeleteBinLine, RiCheckLine, RiNotification3Line, RiSendPlaneFill } from "react-icons/ri";
 import { MdOutlineKeyboardDoubleArrowRight } from "react-icons/md";
 
+// ── Helpers de tempo ──────────────────────────────────────────────
+function formatarTempo(iso: string): string {
+  const agora = new Date();
+  const data = new Date(iso);
+  const diff = Math.floor((agora.getTime() - data.getTime()) / 1000);
+
+  if (diff < 60)    return "Agora mesmo";
+  if (diff < 3600)  return `Há ${Math.floor(diff / 60)} min`;
+  if (diff < 86400) return `Há ${Math.floor(diff / 3600)}h`;
+  if (diff < 172800) return "Ontem";
+  return data.toLocaleDateString("pt-PT", { day: "numeric", month: "short", year: "numeric" });
+}
+
+// ── Config por tipo ──────────────────────────────────────────────
+const tipoConfig: Record<string, { bg: string; label: string }> = {
+  pedido:    { bg: "blue.500",   label: "Pedido" },
+  entregador:{ bg: "purple.500", label: "Entregador" },
+  sistema:   { bg: "gray.500",   label: "Sistema" },
+  suporte:   { bg: "orange.500", label: "Suporte" },
+  info:      { bg: "blue.500",   label: "Informação" },
+  promo:     { bg: "green.500",  label: "Promoção" },
+  alert:     { bg: "red.500",    label: "Alerta" },
+};
+
+// ── Interface real do backend ──────────────────────────────────────
 interface Notificacao {
   id: string;
-  tipo: "pedido" | "entregador" | "sistema" | "suporte";
+  tipo: string;
   titulo: string;
-  descricao: string;
+  mensagem: string;
+  dados?: Record<string, any> | null;
   lida: boolean;
   criadoEm: string;
 }
-
-const tipoColor: Record<string, string> = {
-  pedido: "blue",
-  entregador: "purple",
-  sistema: "gray",
-  suporte: "orange",
-};
-
-const tipoLabel: Record<string, string> = {
-  pedido: "Pedido",
-  entregador: "Entregador",
-  sistema: "Sistema",
-  suporte: "Suporte",
-};
 
 export function MainNotifications() {
   const [lidas, setLidas] = useState<Set<string>>(new Set());
@@ -50,248 +62,166 @@ export function MainNotifications() {
     }
   }, [preferencias.notificacoesPush]);
 
-  // Buscar dados reais do dashboard para gerar notificações
-  const { data: dashboard, isLoading, refetch } = useQuery({
-    queryKey: ['notifDashboard'],
+  // Buscar notificações reais do backend
+  const { data: notificacoes, isLoading } = useQuery({
+    queryKey: ['notificacoes'],
     queryFn: async () => {
-      const [dashRes, suporteRes, motoRes] = await Promise.all([
-        api.get('/admin/dashboard'),
-        api.get('/admin/suporte'),
-        api.get('/admin/motoqueiros/pendentes'),
-      ]);
-      return {
-        dashboard: dashRes.data,
-        suporte: suporteRes.data,
-        motoqueiros: motoRes.data,
-      };
+      const res = await api.get('/notificacoes');
+      return res.data as Notificacao[];
     },
-    refetchInterval: 15000,
-    retry: false,
+    refetchInterval: 15_000,
   });
 
-  // Gerar notificações a partir dos dados reais
-  const notificacoes: Notificacao[] = useMemo(() => {
-    const items: Notificacao[] = [];
-
-    if (dashboard?.motoqueiros) {
-      dashboard.motoqueiros.forEach((m: any) => {
-        items.push({
-          id: `moto_${m.id}`,
-          tipo: "entregador",
-          titulo: `Entregador pendente: ${m.user?.nome || 'Desconhecido'}`,
-          descricao: `${m.user?.nome || ''} ${m.user?.sobrenome || ''} aguarda aprovação.`,
-          lida: false,
-          criadoEm: m.criadoEm || new Date().toISOString(),
-        });
-      });
-    }
-
-    if (dashboard?.suporte) {
-      const ticketsAbertos = dashboard.suporte.filter((t: any) => t.status === 'aberto' || t.status === 'em_analise');
-      ticketsAbertos.forEach((t: any) => {
-        items.push({
-          id: `sup_${t.id}`,
-          tipo: "suporte",
-          titulo: `Ticket: ${t.titulo || t.assunto || 'Sem título'}`,
-          descricao: `${t.user?.nome || 'Utilizador'} ${t.user?.sobrenome || ''} - ${t.status}`,
-          lida: false,
-          criadoEm: t.criadoEm || new Date().toISOString(),
-        });
-      });
-    }
-
-    if (dashboard?.dashboard) {
-      const d = dashboard.dashboard;
-      if (d.pendentes > 0) {
-        items.push({
-          id: 'dash_pendentes',
-          tipo: "sistema",
-          titulo: `${d.pendentes} entregador(es) pendente(s)`,
-          descricao: `Existem entregadores aguardando aprovação.`,
-          lida: false,
-          criadoEm: new Date().toISOString(),
-        });
-      }
-    }
-
-    return items.sort((a, b) => new Date(b.criadoEm).getTime() - new Date(a.criadoEm).getTime());
-  }, [dashboard]);
-
-  // Tocar som e mostrar browser notification quando chegam novas notificações
+  // Notificar browser quando chegam novas
   useEffect(() => {
-    const currentCount = notificacoes.length;
-    if (currentCount > prevCountRef.current && prevCountRef.current > 0) {
-      const novas = currentCount - prevCountRef.current;
-      // Tocar som
-      if (preferencias.som) {
-        try {
-          const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
-          const oscillator = audioCtx.createOscillator();
-          const gainNode = audioCtx.createGain();
-          oscillator.connect(gainNode);
-          gainNode.connect(audioCtx.destination);
-          oscillator.frequency.value = 800;
-          oscillator.type = 'sine';
-          gainNode.gain.setValueAtTime(0.3, audioCtx.currentTime);
-          gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.3);
-          oscillator.start(audioCtx.currentTime);
-          oscillator.stop(audioCtx.currentTime + 0.3);
-        } catch {}
-      }
-      // Browser notification
-      if (preferencias.notificacoesPush && Notification.permission === 'granted') {
-        new Notification('Bazza Admin', {
+    if (!notificacoes) return;
+    if (notificacoes.length > prevCountRef.current && prevCountRef.current > 0) {
+      const novas = notificacoes.length - prevCountRef.current;
+      if (preferencias.notificacoesPush && 'Notification' in window && Notification.permission === 'granted') {
+        new Notification("Baza Admin", {
           body: `${novas} nova(s) notificação(ões)`,
+          icon: "/images/Logo2.png",
         });
       }
     }
-    prevCountRef.current = currentCount;
-  }, [notificacoes.length, preferencias.som, preferencias.notificacoesPush]);
+    prevCountRef.current = notificacoes.length;
+  }, [notificacoes, preferencias.notificacoesPush]);
 
-  const visiveis = notificacoes.filter(n => !eliminadas.has(n.id));
-  const naoLidas = visiveis.filter((n) => !lidas.has(n.id)).length;
+  // Marcar como lida (chama o endpoint real)
+  const marcarComoLida = useCallback(async (id: string) => {
+    setLidas((prev) => { const n = new Set(prev); n.add(id); return n; });
+    try { await api.patch(`/notificacoes/${id}/lida`); } catch { /* silencioso */ }
+  }, []);
 
-  const marcarComoLida = (id: string) => {
-    setLidas(prev => new Set([...prev, id]));
-  };
+  // Eliminar (apenas local)
+  const eliminar = useCallback((id: string) => {
+    setEliminadas((prev) => { const n = new Set(prev); n.add(id); return n; });
+  }, []);
 
-  const marcarTodasComoLidas = () => {
-    setLidas(new Set(visiveis.map(n => n.id)));
-  };
+  // Filtrar eliminadas
+  const visiveis = useMemo(() => {
+    if (!notificacoes) return [];
+    return notificacoes.filter((n) => !eliminadas.has(n.id));
+  }, [notificacoes, eliminadas]);
 
-  const eliminar = (id: string) => {
-    setEliminadas(prev => new Set([...prev, id]));
-  };
+  // Contar não lidas
+  const naoLidas = useMemo(
+    () => visiveis.filter((n) => !n.lida && !lidas.has(n.id)).length,
+    [visiveis, lidas]
+  );
+
+  if (isLoading) {
+    return (
+      <Box as="main" w="100%" display="flex" flexDirection="column" gap={6}>
+        <Center py={12}><Spinner size="xl" color="brand.500" /></Center>
+      </Box>
+    );
+  }
 
   return (
     <Box as="main" w="100%" display="flex" flexDirection="column" gap={6}>
 
-      <Flex justify="space-between" align="flex-start">
-        <Stack alignSelf={"flex-start"}>
-          <Text lineHeight={1} fontSize={"3xl"} fontWeight={"thin"} color={"text.primary"} letterSpacing={"normal"}>Notificações</Text>
-          <Breadcrumb spacing='8px' separator={<MdOutlineKeyboardDoubleArrowRight color='gray.500' />}>
+      {/* ── Header ─────────────────────────────────────────────── */}
+      <Flex justify="space-between" align="flex-start" wrap="wrap" gap={4}>
+        <Stack alignSelf="flex-start">
+          <Text lineHeight={1} fontSize="3xl" fontWeight="thin" color="text.primary" letterSpacing="normal">
+            Notificações
+          </Text>
+          <Breadcrumb spacing="8px" separator={<MdOutlineKeyboardDoubleArrowRight color="gray.500" />}>
             <BreadcrumbItem>
-              <BreadcrumbLink fontSize={"xs"} fontWeight={"hairline"} color={"text.primary"} letterSpacing={"wide"} textTransform={"uppercase"} href='#'>Main Admin</BreadcrumbLink>
+              <BreadcrumbLink fontSize="xs" fontWeight="hairline" color="text.muted" href="/admin/dashboard">Dashboard</BreadcrumbLink>
             </BreadcrumbItem>
             <BreadcrumbItem>
-              <BreadcrumbLink fontWeight={"normal"} letterSpacing={"spaced"} textAlign={"end"} href='/admin/notifications'>Notificações</BreadcrumbLink>
+              <BreadcrumbLink fontSize="xs" fontWeight="hairline" color="text.muted" href="/admin/notifications">Notificações</BreadcrumbLink>
             </BreadcrumbItem>
           </Breadcrumb>
         </Stack>
-        <Button
-          as={NextLink}
-          href="/admin/notifications/send"
-          leftIcon={<RiSendPlaneFill />}
-          colorScheme="purple"
-          size="sm"
-        >
-          Enviar Notificação
-        </Button>
+
+        <HStack spacing={3}>
+          {naoLidas > 0 && (
+            <Badge colorScheme="red" borderRadius="full" px={3} py={1} fontSize="sm">
+              {naoLidas} não lida(s)
+            </Badge>
+          )}
+          <Button as={NextLink} href="/admin/notifications/send" leftIcon={<RiSendPlaneFill />} colorScheme="brand" size="sm" rounded="lg">
+            Enviar Notificação
+          </Button>
+        </HStack>
       </Flex>
 
-      {/* Resumo */}
-      <SimpleGrid columns={4} gap={4}>
-        {Object.entries(tipoLabel).map(([key, label]) => {
-          const count = visiveis.filter((n) => n.tipo === key && !lidas.has(n.id)).length;
-          return (
-            <Box key={key} bg="bg.card" border="1px solid" borderColor="border.default" rounded="lg" p={4}>
-              <HStack justify="space-between">
-                <Text fontSize="sm" color="text.secondary">{label}</Text>
-                <Tag colorScheme={tipoColor[key]} size="sm">
-                  <TagLabel>{count} novas</TagLabel>
-                </Tag>
-              </HStack>
-            </Box>
-          );
-        })}
-      </SimpleGrid>
+      {/* ── Separador ──────────────────────────────────────────── */}
+      <Flex w="100%" justifyContent="space-between" alignItems="center">
+        <Text fontSize="sm" color="text.secondary" fontWeight="light" letterSpacing="wide">
+          Todas as notificações
+        </Text>
+      </Flex>
 
-      {/* Lista */}
-      <Box bg="bg.card" border="1px solid" borderColor="border.default" rounded="lg" p={6}>
-        <HStack justify="space-between" mb={4}>
-          <HStack gap={3}>
-            <RiNotification3Line size={20} />
-            <Text fontWeight="bold" fontSize="lg">Todas as Notificações</Text>
-            {naoLidas > 0 && (
-              <Badge colorScheme="red" rounded="full" px={2}>{naoLidas} não lidas</Badge>
-            )}
-          </HStack>
+      {/* ── Sem notificações ───────────────────────────────────── */}
+      {visiveis.length === 0 && (
+        <Center py={12} flexDirection="column" gap={3}>
+          <RiNotification3Line fontSize="48px" color="#718096" />
+          <Text color="text.muted" fontSize="sm">Nenhuma notificação</Text>
+        </Center>
+      )}
 
-          {naoLidas > 0 && (
-            <Button size="xs" variant="ghost" leftIcon={<RiCheckLine />} onClick={marcarTodasComoLidas}>
-              Marcar todas como lidas
-            </Button>
-          )}
-        </HStack>
+      {/* ── Lista de notificações ──────────────────────────────── */}
+      {visiveis.map((noti) => {
+        const config = tipoConfig[noti.tipo] || tipoConfig.sistema;
+        const estaLida = noti.lida || lidas.has(noti.id);
 
-        {isLoading ? (
-          <Center py={8}><Spinner /></Center>
-        ) : (
-        <Stack gap={2}>
-          {visiveis.length === 0 ? (
-            <Text color="text.secondary" fontSize="sm" textAlign="center" py={8}>
-              Nenhuma notificação.
-            </Text>
-          ) : (
-            visiveis.map((n) => {
-              const isLida = lidas.has(n.id);
-              return (
-              <Flex
-                key={n.id}
-                justify="space-between"
-                align="center"
-                p={4}
-                bg={isLida ? "transparent" : "bg.hover"}
-                rounded="md"
-                border="1px solid"
-                borderColor="border.default"
-              >
-                <HStack gap={3} flex={1}>
-                  {!isLida && (
-                    <Box w={2} h={2} rounded="full" bg={`${tipoColor[n.tipo]}.400`} flexShrink={0} />
-                  )}
-                  <Box flex={1}>
-                    <HStack gap={2} mb={1}>
-                      <Text fontSize="sm" fontWeight="medium">{n.titulo}</Text>
-                      <Tag colorScheme={tipoColor[n.tipo]} size="sm">
-                        <TagLabel>{tipoLabel[n.tipo]}</TagLabel>
-                      </Tag>
-                    </HStack>
-                    <Text fontSize="xs" color="text.secondary">{n.descricao}</Text>
-                  </Box>
-                </HStack>
-
-                <HStack gap={2} flexShrink={0}>
-                  <Text fontSize="xs" color="text.muted">
-                    {new Date(n.criadoEm).toLocaleDateString("pt-PT")}
-                  </Text>
-                  {!isLida && (
-                    <IconButton
-                      aria-label="Marcar como lida"
-                      icon={<RiCheckLine />}
-                      size="xs"
-                      variant="ghost"
-                      colorScheme="green"
-                      onClick={() => marcarComoLida(n.id)}
-                    />
-                  )}
-                  <IconButton
-                    aria-label="Eliminar"
-                    icon={<RiDeleteBinLine />}
-                    size="xs"
-                    variant="ghost"
-                    colorScheme="red"
-                    onClick={() => eliminar(n.id)}
-                  />
-                </HStack>
+        return (
+          <Flex
+            key={noti.id}
+            direction="column"
+            justifyContent="flex-start"
+            alignItems="flex-start"
+            p={4}
+            rounded="xl"
+            borderWidth="1px"
+            borderColor="border.default"
+            bg={estaLida ? "transparent" : "brand.900"}
+            opacity={estaLida ? 0.6 : 1}
+            gap={3}
+            _hover={{ opacity: 1 }}
+            transition="opacity 0.2s"
+          >
+            <Flex w="100%" gap={4} alignItems="flex-start">
+              <Flex rounded="full" p={3} bg={config.bg} alignItems="center" justifyContent="center" flexShrink={0}>
+                <RiNotification3Line fontSize="18px" color="white" />
               </Flex>
-              );
-            })
-          )}
-        </Stack>
-        )}
-      </Box>
 
+              <Stack spacing={1} flex={1} minW={0}>
+                <Flex w="100%" justifyContent="space-between" alignItems="center" gap={2}>
+                  <HStack spacing={2}>
+                    <Text fontWeight="semibold" fontSize="sm" fontFamily="body" letterSpacing="wide" color="text.primary" noOfLines={1}>
+                      {noti.titulo}
+                    </Text>
+                    <Tag size="sm" variant="subtle" colorScheme={config.bg.replace('.500', '')}>
+                      <TagLeftIcon as={RiCircleFill} boxSize="6px" />
+                      <TagLabel fontSize="10px">{config.label}</TagLabel>
+                    </Tag>
+                  </HStack>
+
+                  <HStack spacing={1} flexShrink={0}>
+                    {!estaLida && (
+                      <IconButton icon={<RiCheckLine />} aria-label="Marcar como lida" size="xs" variant="ghost" colorScheme="green" onClick={() => marcarComoLida(noti.id)} />
+                    )}
+                    <IconButton icon={<RiDeleteBinLine />} aria-label="Eliminar" size="xs" variant="ghost" colorScheme="red" onClick={() => eliminar(noti.id)} />
+                  </HStack>
+                </Flex>
+
+                <Text fontWeight="hairline" fontFamily="body" fontSize="sm" letterSpacing="wide" color="text.secondary" noOfLines={2}>
+                  {noti.mensagem}
+                </Text>
+
+                <Text fontSize="xs" color="text.muted">
+                  {formatarTempo(noti.criadoEm)}
+                </Text>
+              </Stack>
+            </Flex>
+          </Flex>
+        );
+      })}
     </Box>
   );
 }

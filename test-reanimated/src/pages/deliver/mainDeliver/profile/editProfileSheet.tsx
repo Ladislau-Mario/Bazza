@@ -8,6 +8,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { themes } from '../../../../global/themes';
 import { PickerService } from '../../../../components/modules/services/pickerService/pickerService';
 import api from '../../../../components/modules/services/api/api';
+import { enviarFicheiro } from '../../../../components/modules/services/api/uploadService';
 
 // ── Tipos ──────────────────────────────────────────────────────────────────
 interface ProfileData {
@@ -52,12 +53,10 @@ export default function EditProfileSheet({ profile, onSave, onCancel }: Props) {
 
       // Upload da foto se foi alterada
       if (photoUri && photoUri !== profile.photoUri) {
-        const formData = new FormData();
         const filename = photoUri.split('/').pop() || 'photo.jpg';
         const ext = filename.split('.').pop()?.toLowerCase() || 'jpg';
         const mime = ext === 'png' ? 'image/png' : 'image/jpeg';
-        formData.append('file', { uri: photoUri, name: filename, type: mime } as any);
-        await api.post('/users/foto-perfil', formData);
+        await enviarFicheiro('foto-perfil', photoUri, mime);
       }
 
       setSaving(false);

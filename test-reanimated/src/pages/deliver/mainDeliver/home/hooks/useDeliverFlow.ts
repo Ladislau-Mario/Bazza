@@ -105,7 +105,9 @@ function normalizeNumber(value: any, fallback = 0): number {
 
 function normalizeOrder(pedido: any): DeliveryOrder {
   const distanciaKm = normalizeNumber(pedido?.distanciaKm);
-  const preco = normalizeNumber(pedido?.precoFinal ?? pedido?.precoBase ?? pedido?.valorEntrega);
+  const precoBase = normalizeNumber(pedido?.valorEntrega ?? pedido?.precoBase);
+  const precoAcordado = normalizeNumber(pedido?.precoAcordado);
+  const precoFinal = precoAcordado > 0 ? precoAcordado : precoBase;
   const pickupCoords = {
     latitude: normalizeNumber(pedido?.pickupCoords?.latitude ?? pedido?.origemLatitude),
     longitude: normalizeNumber(pedido?.pickupCoords?.longitude ?? pedido?.origemLongitude),
@@ -129,8 +131,8 @@ function normalizeOrder(pedido: any): DeliveryOrder {
     packageType: pedido?.packageType ?? pedido?.tipo ?? 'documento',
     packageWeight: pedido?.packageWeight ?? pedido?.peso ?? 'normal',
     observations: pedido?.observations ?? pedido?.descricaoEncomenda ?? pedido?.notas ?? '',
-    precoBase: preco,
-    precoFinal: normalizeNumber(pedido?.precoFinal, preco),
+    precoBase,
+    precoFinal,
     distanciaKm,
     tempoEstimadoMin: normalizeNumber(pedido?.tempoEstimadoMin ?? pedido?.duracaoMinutos, 5),
     metodoPagamento: pedido?.metodoPagamento ?? pedido?.tipoPagamento ?? 'numerario',

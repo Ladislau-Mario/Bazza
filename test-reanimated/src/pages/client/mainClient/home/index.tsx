@@ -379,6 +379,16 @@ export default function HomeClient() {
   }, [searching]);
 
   // ─────────────────────────────────────────────────────────────────────────
+  // AUTO-ABRIR AVALIAÇÃO QUANDO ENTREGA É CONCLUÍDA PELO DELIVER
+  // ─────────────────────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (deliveryStatus === 'entregue' && !ratingVisible) {
+      setQrVisible(false);
+      setTimeout(() => setRatingVisible(true), 800);
+    }
+  }, [deliveryStatus]);
+
+  // ─────────────────────────────────────────────────────────────────────────
   // ACÇÕES
   // ─────────────────────────────────────────────────────────────────────────
   function handleSelectDestination(item: typeof FIXED_ADDRESSES[0]) {
@@ -835,9 +845,9 @@ export default function HomeClient() {
                 <Ionicons name="share-social-outline" size={18} color="#2D60FF"/>
                 <Text style={st.qrActionTxt}>Partilhar</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={[st.qrActionBtn,{backgroundColor:'#10B98120'}]} onPress={handleCompleteDelivery}>
+              <TouchableOpacity style={[st.qrActionBtn,{backgroundColor:'#10B98120'}]} onPress={()=>setQrVisible(false)}>
                 <Ionicons name="checkmark-circle-outline" size={18} color="#10B981"/>
-                <Text style={[st.qrActionTxt,{color:'#10B981'}]}>Concluir</Text>
+                <Text style={[st.qrActionTxt,{color:'#10B981'}]}>Fechar</Text>
               </TouchableOpacity>
             </View>
             <TouchableOpacity onPress={()=>setQrVisible(false)} style={{marginTop:10}}>

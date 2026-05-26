@@ -45,6 +45,7 @@ export class Pedido {
 
   // Preço e pagamento
   @Column('decimal', { precision: 10, scale: 2 })        valorEntrega: number;
+  @Column('decimal', { precision: 10, scale: 2, nullable: true }) precoAcordado: number;
   @Column({ type: 'enum', enum: TipoPagamento, default: TipoPagamento.NUMERARIO }) tipoPagamento: TipoPagamento;
 
   // QR / Código de confirmação

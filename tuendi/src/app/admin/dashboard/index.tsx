@@ -131,7 +131,7 @@ export function MainDashboard() {
       <Grid
         templateColumns="repeat(3, 1fr)"
         gap={6}
-        templateRows="repeat(2, minmax(300px, 360px))"
+        templateRows="repeat(2, minmax(340px, 440px))"
       >
         
         {/* Gráfico de barras — Fatura anual */}
@@ -142,7 +142,7 @@ export function MainDashboard() {
               series={[{ name: "Receita", data: dadosReceita }]}
               type="bar"
               width="100%"
-              height={240}
+              height={320}
             />
           </DashboardCard>
         </GridItem>

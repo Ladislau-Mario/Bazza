@@ -17,7 +17,7 @@ import PlanCard from './planCard';
 import PaymentModal from './paymentmodal';
 import { PLANS } from './plansData';
 import { Plan } from './types';
-import api from '../../../../components/modules/services/api/api';
+import { enviarComprovativoPlano } from '../../../../components/modules/services/api/uploadService';
 
 const { width: SW } = Dimensions.get('window');
 
@@ -40,17 +40,11 @@ export default function Plans() {
     try {
       const tierMap: Record<string, string> = { daily: 'diario', weekly: 'semanal', monthly: 'mensal' };
       const tipo = tierMap[selectedPlan.id] || selectedPlan.id;
-      const formData = new FormData();
-      formData.append('tipo', tipo);
-      formData.append('comprovativo', {
-        uri: proofUri,
-        type: proofType === 'pdf' ? 'application/pdf' : 'image/jpeg',
-        name: proofName || `comprovativo_${tipo}.jpg`,
-      } as any);
-      await api.post('/planos/submeter', formData);
+      const mime = proofType === 'pdf' ? 'application/pdf' : 'image/jpeg';
+      await enviarComprovativoPlano(tipo, proofUri, mime, proofName);
       console.log('Comprovativo enviado com sucesso');
     } catch (error: any) {
-      console.warn('Erro ao enviar comprovativo:', error?.response?.data || error);
+      console.warn('Erro ao enviar comprovativo:', error?.message || error);
     }
   };
 

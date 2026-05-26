@@ -52,7 +52,9 @@ function normalizeTipoPagamento(value: string): 'numerario' | 'carteira' | 'stri
 
 function normalizePedido(pedido: any, fallback?: Partial<DeliveryOrder>): DeliveryOrder {
   const distanciaKm = normalizeNumber(pedido?.distanciaKm, normalizeNumber((fallback as any)?.distanciaKm));
-  const valorEntrega = normalizeNumber(pedido?.valorEntrega ?? pedido?.precoFinal ?? pedido?.precoBase, normalizeNumber((fallback as any)?.precoFinal));
+  const precoAcordado = normalizeNumber(pedido?.precoAcordado);
+  const precoCalculado = normalizeNumber(pedido?.valorEntrega ?? pedido?.precoFinal ?? pedido?.precoBase, normalizeNumber((fallback as any)?.precoFinal));
+  const valorEntrega = precoAcordado > 0 ? precoAcordado : precoCalculado;
 
   // Mapear relação motoqueiro aninhada para formato flat
   let motoqueiro = pedido?.motoqueiro;
@@ -173,7 +175,12 @@ export function useDelivery() {
             if (motoqueiroSocket || status === 'motoqueiro_atribuido' || status === 'a_caminho_recolha') {
               setSearching(false);
             }
-            if (status === 'entregue' || status === 'cancelado') {
+            if (status === 'entregue') {
+              stopPolling();
+              // Auto-completar: o deliver já confirmou via QR/código
+              setActiveOrder(prev => prev ? { ...prev, status: 'entregue', entregueEm: new Date().toISOString() } : null);
+            }
+            if (status === 'cancelado') {
               stopPolling();
             }
           } catch (e) {

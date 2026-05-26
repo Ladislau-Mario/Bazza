@@ -54,6 +54,7 @@ export class PedidosService {
       distanciaKm,
       duracaoMinutos,
       valorEntrega,
+      precoAcordado: valorEntrega, // Preço inicia igual ao valor calculado
       codigoNumerico,
       codigoQr,
       codigoConfirmado: false,
@@ -90,7 +91,7 @@ export class PedidosService {
   }
 
   // ── 2. ACEITAR PEDIDO (motoqueiro) ─────────────────────────────────────────
-  async aceitar(pedidoId: string, motoqueiroUserId: string) {
+  async aceitar(pedidoId: string, motoqueiroUserId: string, precoAcordado?: number) {
     const pedido = await this.repo.findOne({
       where: { id: pedidoId },
       relations: ['cliente'],
@@ -110,6 +111,9 @@ export class PedidosService {
     pedido.motoqueiroId = deliver.id;
     pedido.status = StatusPedido.A_CAMINHO_RECOLHA;
     pedido.atribuidoEm = new Date();
+    if (precoAcordado != null && precoAcordado > 0) {
+      pedido.precoAcordado = precoAcordado;
+    }
     await this.repo.save(pedido);
 
     // Buscar deliver com user relation para enviar dados completos
@@ -235,11 +239,18 @@ export class PedidosService {
       await this._creditarMotoqueiro(pedido, motoqueiroUserId);
     }
 
-    // Emitir evento socket
+    // Emitir evento socket para TODOS na sala (cliente + motoqueiro)
     try {
       this.chatGateway.server.to(`pedido_${pedido.id}`).emit('order:status_update', {
         pedidoId: pedido.id,
         status: 'entregue',
+        pedido: {
+          id: pedido.id,
+          status: 'entregue',
+          entregueEm: pedido.entregueEm,
+          valorEntrega: pedido.valorEntrega,
+          precoAcordado: pedido.precoAcordado,
+        },
       });
     } catch {}
 
@@ -353,7 +364,7 @@ export class PedidosService {
       .orderBy('p.entregueEm', 'DESC')
       .getMany();
 
-    const total = pedidos.reduce((s, p) => s + Number(p.valorEntrega) * 0.85, 0);
+    const total = pedidos.reduce((s, p) => s + Number(p.precoAcordado || p.valorEntrega), 0);
     const porDia: Record<string, number> = {};
 
     // Montar array de dias no formato esperado pelo mobile
@@ -370,7 +381,7 @@ export class PedidosService {
       const hourlyData = Array(24).fill(0);
       let dayTotal = 0;
       dayPedidos.forEach(p => {
-        const ganho = Number(p.valorEntrega) * 0.85;
+        const ganho = Number(p.precoAcordado || p.valorEntrega);
         const h = new Date(p.entregueEm).getHours();
         hourlyData[h] += ganho;
         dayTotal += ganho;
@@ -390,7 +401,7 @@ export class PedidosService {
 
   // ── HELPER PRIVADO ─────────────────────────────────────────────────────────
   private async _creditarMotoqueiro(pedido: Pedido, motoqueiroUserId: string) {
-    const ganho = Number(pedido.valorEntrega) * 0.85;
+    const ganho = Number(pedido.precoAcordado || pedido.valorEntrega);
     await this.carteiraService.adicionarTransacao(
       motoqueiroUserId,
       TipoTransacao.CREDITO,

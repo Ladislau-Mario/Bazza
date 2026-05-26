@@ -1,5 +1,8 @@
 // src/components/modules/services/api/uploadService.ts
-import api from './api';
+import { Platform } from 'react-native';
+import { getIdToken } from '../firebase-token';
+
+const BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://10.242.160.144:3000';
 
 type TipoUpload =
   | 'foto-perfil'
@@ -12,10 +15,8 @@ type TipoUpload =
   | 'prova-entrega';
 
 /**
- * Envia um único ficheiro para o backend.
- * @param tipo   endpoint do upload (ex: 'foto-perfil')
- * @param uri    URI local do ficheiro (do ImagePicker / DocumentPicker)
- * @param mime   mime type (default: image/jpeg)
+ * Envia um único ficheiro para o backend usando fetch nativo.
+ * Usa fetch em vez de axios para compatibilidade com React Native FormData.
  */
 export const enviarFicheiro = async (
   tipo: TipoUpload,
@@ -26,15 +27,92 @@ export const enviarFicheiro = async (
   const ext = uri.split('.').pop()?.toLowerCase() || 'jpg';
   const filename = uri.split('/').pop() || `${tipo}.${ext}`;
 
+  // Normalizar URI para Android (content:// precisa de file://)
+  let fileUri = uri;
+  if (Platform.OS === 'android' && uri.startsWith('content://')) {
+    fileUri = uri;
+  }
+
   formData.append('file', {
-    uri,
+    uri: fileUri,
     type: mime,
     name: filename,
   } as any);
 
-  const res = await api.post(`/uploads/${tipo}`, formData);
+  // Obter token de autenticação
+  let token: string | null = null;
+  try {
+    token = await getIdToken();
+  } catch {
+    console.warn('[Upload] Não foi possível obter token Firebase');
+  }
 
-  return res.data;
+  const url = `${BASE_URL}/uploads/${tipo}`;
+  console.log(`[Upload] POST ${url} file=${filename} mime=${mime}`);
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Authorization': token ? `Bearer ${token}` : '',
+      // NÃO definir Content-Type — o fetch define automaticamente com boundary
+    },
+    body: formData,
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    const errMsg = data?.message || `HTTP ${response.status}`;
+    throw new Error(errMsg);
+  }
+
+  console.log(`[Upload] OK ${tipo}:`, JSON.stringify(data).substring(0, 100));
+  return data;
+};
+
+/**
+ * Envia o comprovativo de pagamento de plano usando fetch nativo.
+ */
+export const enviarComprovativoPlano = async (
+  tipo: string,
+  uri: string,
+  mime = 'image/jpeg',
+  filename?: string,
+) => {
+  const formData = new FormData();
+  const name = filename || uri.split('/').pop() || `comprovativo_${tipo}.jpg`;
+
+  formData.append('tipo', tipo);
+  formData.append('comprovativo', {
+    uri,
+    type: mime,
+    name,
+  } as any);
+
+  let token: string | null = null;
+  try {
+    token = await getIdToken();
+  } catch {}
+
+  const url = `${BASE_URL}/planos/submeter`;
+  console.log(`[PlanUpload] POST ${url} tipo=${tipo} file=${name}`);
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Authorization': token ? `Bearer ${token}` : '',
+    },
+    body: formData,
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data?.message || `HTTP ${response.status}`);
+  }
+
+  console.log(`[PlanUpload] OK:`, JSON.stringify(data).substring(0, 100));
+  return data;
 };
 
 /**
@@ -49,7 +127,7 @@ export const enviarDocumentosMotoqueiro = async (docs: {
   fotoVerso?: string | null;
   fotoVersoMime?: string | null;
   fotoFrenteBI?: string | null;
-    fotoFrenteBIMime?: string | null;
+  fotoFrenteBIMime?: string | null;
   fotoVersoBI?: string | null;
   fotoVersoBIMime?: string | null;
   fotoVeiculo?: string | null;
@@ -75,13 +153,10 @@ export const enviarDocumentosMotoqueiro = async (docs: {
       continue;
     }
     try {
-      console.log(`[Upload] Enviando ${tipo} uri=${uri.substring(0, 50)}... mime=${mime}`);
-      const result = await enviarFicheiro(tipo, uri, mime);
-      console.log(`[Upload] OK ${tipo}:`, JSON.stringify(result).substring(0, 100));
+      await enviarFicheiro(tipo, uri, mime);
     } catch (e: any) {
-      const errMsg = e?.response?.data?.message || e?.response?.data || e?.message || String(e);
+      const errMsg = e?.message || String(e);
       console.warn(`[Upload] Falha em ${tipo}:`, errMsg);
-      if (e?.response?.status) console.warn(`[Upload] Status: ${e.response.status}`);
       erros.push(tipo);
     }
   }

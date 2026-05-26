@@ -68,8 +68,25 @@ export class PedidosController {
   @Patch(':id/aceitar')
   @Roles('deliver')
   @ApiOperation({ summary: 'Aceitar pedido (motoqueiro)' })
-  aceitar(@Param('id') id: string, @CurrentUser() user: User) {
-    return this.service.aceitar(id, user.id);
+  aceitar(@Param('id') id: string, @CurrentUser() user: User, @Body('precoAcordado') precoAcordado?: number) {
+    return this.service.aceitar(id, user.id, precoAcordado);
+  }
+
+  /** Ajustar preço do pedido (cliente ou motoqueiro) */
+  @Patch(':id/preco')
+  @ApiOperation({ summary: 'Ajustar preço do pedido (cliente ou motoqueiro)' })
+  async ajustarPreco(
+    @Param('id') id: string,
+    @CurrentUser() user: User,
+    @Body('precoAcordado') precoAcordado: number,
+  ) {
+    if (!precoAcordado || precoAcordado <= 0) {
+      return { success: false, message: 'Preço inválido' };
+    }
+    const pedido = await this.service.buscarPorId(id);
+    pedido.precoAcordado = precoAcordado;
+    await this.service['repo'].save(pedido);
+    return { success: true, precoAcordado };
   }
 
   /** Actualizar status (recolhido, entregando, etc.) */

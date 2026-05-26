@@ -3,7 +3,7 @@ import React, { useState, useCallback } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity,
   ScrollView, Alert, Platform, StatusBar,
-  ActivityIndicator, RefreshControl,
+  ActivityIndicator, RefreshControl, Image, Modal,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -12,6 +12,7 @@ import { themes } from '../../../../global/themes';
 import api from '../../../../components/modules/services/api/api';
 import { PickerService } from '../../../../components/modules/services/pickerService/pickerService';
 import { enviarFicheiro } from '../../../../components/modules/services/api/uploadService';
+import { getIdToken } from '../../../../components/modules/services/firebase-token';
 
 // ── Tipos ──────────────────────────────────────────────────────────────────
 interface Documento {
@@ -85,6 +86,28 @@ export default function DeliverDocuments() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [uploadingTipo, setUploadingTipo] = useState<string | null>(null);
+  const [viewerDoc, setViewerDoc] = useState<{ uri: string; label: string } | null>(null);
+  const [authToken, setAuthToken] = useState<string | null>(null);
+
+  // Carregar token de auth para imagens
+  const loadToken = useCallback(async () => {
+    try {
+      const token = await getIdToken();
+      setAuthToken(token);
+    } catch (err) {
+      console.warn('[Docs] Erro ao obter token:', err);
+    }
+  }, []);
+
+  // Abrir visualizador de imagem
+  const openViewer = (docId: string, label: string) => {
+    if (!authToken) return;
+    const BASE_URL = api.defaults.baseURL || 'http://10.242.160.144:3000';
+    setViewerDoc({
+      uri: `${BASE_URL}/uploads/${docId}/download`,
+      label,
+    });
+  };
 
   const carregarDocumentos = useCallback(async () => {
     try {
@@ -102,7 +125,8 @@ export default function DeliverDocuments() {
     useCallback(() => {
       setLoading(true);
       carregarDocumentos();
-    }, [carregarDocumentos])
+      loadToken();
+    }, [carregarDocumentos, loadToken])
   );
 
   const onRefresh = () => {
@@ -132,18 +156,11 @@ export default function DeliverDocuments() {
 
               setUploadingTipo(tipo);
 
-              const formData = new FormData();
               const ext = file.uri.split('.').pop()?.toLowerCase() || 'jpg';
               const filename = file.name || `${tipo}.${ext}`;
               const mime = file.mimeType || 'image/jpeg';
 
-              formData.append('file', {
-                uri: file.uri,
-                type: mime,
-                name: filename,
-              } as any);
-
-              await api.post(`/uploads/${config.uploadTipo}`, formData);
+              await enviarFicheiro(config.uploadTipo as any, file.uri, mime);
 
               Alert.alert('Sucesso', 'Documento enviado. Ficara pendente ate aprovacao.');
               await carregarDocumentos();
@@ -215,6 +232,28 @@ export default function DeliverDocuments() {
             <Ionicons name="alert-circle-outline" size={14} color="#EF4444" />
             <Text style={s.rejeicaoText}>{doc.motivoRejeicao}</Text>
           </View>
+        )}
+
+        {/* Thumbnail do documento */}
+        {doc && authToken && (
+          <TouchableOpacity
+            style={s.docThumbnailWrap}
+            onPress={() => openViewer(doc.id, config.label)}
+            activeOpacity={0.8}
+          >
+            <Image
+              source={{
+                uri: `${api.defaults.baseURL || 'http://10.242.160.144:3000'}/uploads/${doc.id}/download`,
+                headers: { Authorization: `Bearer ${authToken}` },
+              }}
+              style={s.docThumbnail}
+              resizeMode="cover"
+            />
+            <View style={s.docThumbnailOverlay}>
+              <Ionicons name="expand-outline" size={16} color="white" />
+              <Text style={s.docThumbnailLabel}>Tocar para ver</Text>
+            </View>
+          </TouchableOpacity>
         )}
       </View>
     );
@@ -295,6 +334,37 @@ export default function DeliverDocuments() {
           </View>
         </ScrollView>
       )}
+
+      {/* ── Modal Visualizador de Imagem ── */}
+      <Modal
+        visible={!!viewerDoc}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setViewerDoc(null)}
+      >
+        <View style={s.modalOverlay}>
+          <View style={s.modalHeader}>
+            <Text style={s.modalTitle}>{viewerDoc?.label || ''}</Text>
+            <TouchableOpacity
+              style={s.modalCloseBtn}
+              onPress={() => setViewerDoc(null)}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="close" size={24} color="white" />
+            </TouchableOpacity>
+          </View>
+          {viewerDoc && authToken && (
+            <Image
+              source={{
+                uri: viewerDoc.uri,
+                headers: { Authorization: `Bearer ${authToken}` },
+              }}
+              style={s.modalImage}
+              resizeMode="contain"
+            />
+          )}
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -435,4 +505,68 @@ const s = StyleSheet.create({
   // Loading
   centerWrap: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 12 },
   loadingText: { fontSize: 13, color: '#5A6B7B', fontFamily: themes.fonts.poppinsRegular },
+
+  // Thumbnail
+  docThumbnailWrap: {
+    marginTop: 10,
+    borderRadius: 10,
+    overflow: 'hidden',
+    height: 120,
+    backgroundColor: '#1A2535',
+  },
+  docThumbnail: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 10,
+  },
+  docThumbnailOverlay: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 6,
+    borderBottomLeftRadius: 10,
+    borderBottomRightRadius: 10,
+  },
+  docThumbnailLabel: {
+    fontSize: 11,
+    color: 'white',
+    fontFamily: themes.fonts.poppinsRegular,
+  },
+
+  // Modal Visualizador
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.95)',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingTop: Platform.OS === 'ios' ? 60 : (StatusBar.currentHeight ?? 28) + 12,
+    paddingBottom: 12,
+  },
+  modalTitle: {
+    fontSize: 16,
+    color: 'white',
+    fontFamily: themes.fonts.poppinsSemi,
+  },
+  modalCloseBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#FFFFFF20',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalImage: {
+    flex: 1,
+    width: '100%',
+  },
 });
