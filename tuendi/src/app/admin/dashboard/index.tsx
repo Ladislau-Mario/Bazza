@@ -1,5 +1,5 @@
 "use client";
-import { Box, Breadcrumb, BreadcrumbItem, BreadcrumbLink, Flex, Grid, GridItem, Stack, Text, HStack, Avatar, Tag, TagLabel, TagLeftIcon, Button } from "@chakra-ui/react";
+import { Box, Breadcrumb, BreadcrumbItem, BreadcrumbLink, Flex, Grid, GridItem, Stack, Text, HStack, Avatar, Tag, TagLabel, TagLeftIcon, Button, Center } from "@chakra-ui/react";
 import dynamic from "next/dynamic";
 
 const Chart = dynamic(() => import("react-apexcharts"), { ssr: false });
@@ -8,7 +8,7 @@ import { ResumeCard } from "@/components/UI/DataResume/ResumeCard";
 import BarChart from "@/components/Icons/icons";
 import { DashboardCard } from "./DashboardCard";
 import { TopRatedList, User } from "./TopRatedList";
-import { useContext, useMemo } from "react";
+import { useContext, useMemo, useState } from "react";
 import { IPedido, IUser } from "@/services/mirage/types";
 import type { ApexOptions } from "apexcharts";
 import { getBarOptions, getAreaOptions, getRadialBarOptions } from "../../../styles/chartsConfig";
@@ -21,7 +21,7 @@ import { useRouter } from "next/navigation";
 
 export function MainDashboard() {
   const router = useRouter();
-  const { receitaPorMes, entregasPorMes, pedidos, motoqueiros, clientes, motoqueirosPendentes, ticketsAbertos } = useContext(DashboardContext);
+  const { receitaPorMes, faturaPorMes, entregasPorMes, pedidos, motoqueiros, clientes, motoqueirosPendentes, ticketsAbertos } = useContext(DashboardContext);
 
   // Cards
   const totalPedidos   = useMemo(() => pedidos.filter((p) => p.status === "entregue").length, [pedidos]);
@@ -32,9 +32,38 @@ export function MainDashboard() {
   const receita         = useMemo(() => pedidos.filter((p) => p.status === "entregue").reduce((acc, p) => acc + Number(p.valorEntrega || 0), 0), [pedidos]);
   const fatura          = useMemo(() => pedidos.reduce((acc, p) => acc + Number(p.valorEntrega || 0), 0), [pedidos]);
 
+  // ── Filtros de período ──────────────────────────────────────────
+  type FilterPeriod = "diario" | "semanal" | "mensal" | "anual";
+  const [faturaFilter, setFaturaFilter] = useState<FilterPeriod>("mensal");
+  const [entregasFilter, setEntregasFilter] = useState<FilterPeriod>("mensal");
+  const [estadosFilter, setEstadosFilter] = useState<FilterPeriod>("mensal");
+
+  function filtrarPorPeriodo(lista: typeof pedidos, period: FilterPeriod) {
+    const now = new Date();
+    const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    if (period === "diario") {
+      return lista.filter((p) => new Date(p.criadoEm) >= startOfDay);
+    }
+    if (period === "semanal") {
+      const startOfWeek = new Date(startOfDay);
+      startOfWeek.setDate(startOfWeek.getDate() - startOfWeek.getDay());
+      return lista.filter((p) => new Date(p.criadoEm) >= startOfWeek);
+    }
+    if (period === "mensal") {
+      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+      return lista.filter((p) => new Date(p.criadoEm) >= startOfMonth);
+    }
+    return lista; // anual = todos
+  }
+
   // Gráficos
+  const pedidosFaturaFiltrados   = useMemo(() => filtrarPorPeriodo(pedidos, faturaFilter), [pedidos, faturaFilter]);
+  const pedidosEntregasFiltrados = useMemo(() => filtrarPorPeriodo(pedidos, entregasFilter), [pedidos, entregasFilter]);
+  const pedidosEstadosFiltrados  = useMemo(() => filtrarPorPeriodo(pedidos, estadosFilter), [pedidos, estadosFilter]);
+
+  const dadosFatura    = useMemo(() => faturaPorMes(pedidosFaturaFiltrados), [pedidosFaturaFiltrados]);
   const dadosReceita   = useMemo(() => receitaPorMes(pedidos), [pedidos]);
-  const dadosEntregas  = useMemo(() => entregasPorMes(pedidos), [pedidos]);
+  const dadosEntregas  = useMemo(() => entregasPorMes(pedidosEntregasFiltrados), [pedidosEntregasFiltrados]);
 
   // TopRated — motoqueiros ordenados por classificação
   const topMotoqueiros = useMemo(() =>
@@ -136,37 +165,43 @@ export function MainDashboard() {
         
         {/* Gráfico de barras — Fatura anual */}
         <GridItem colSpan={2}>
-          <DashboardCard title="Total de Fatura" value={fatura}>
-            <Chart
-              options={getBarOptions()}
-              series={[{ name: "Receita", data: dadosReceita }]}
-              type="bar"
-              width="100%"
-              height={240}
-            />
+          <DashboardCard title="Total de Fatura" value={fatura} activeFilter={faturaFilter} onFilter={setFaturaFilter}>
+            <Box w="89%" mx="auto" h="100%">
+              <Chart
+                options={getBarOptions()}
+                series={[{ name: "Fatura", data: dadosFatura }]}
+                type="bar"
+                width="100%"
+                height={240}
+              />
+            </Box>
           </DashboardCard>
         </GridItem>
 
         {/* Semicírculo — estados das entregas */}
         <GridItem>
-        <DashboardCard title="Estados das Entregas">
-            <Chart
-            options={getRadialBarOptions()}
-            series={[
-                Math.round((pedidos.filter((p) => p.status === "entregue").length / Math.max(pedidos.length, 1)) * 100),
-                Math.round((pedidos.filter((p) => EM_ANDAMENTO.includes(p.status)).length / Math.max(pedidos.length, 1)) * 100),
-                Math.round((pedidos.filter((p) => p.status === "cancelado").length / Math.max(pedidos.length, 1)) * 100),
-            ]}
-            type="radialBar"
-            width="100%"
-            height="260px"
-            />
+        <DashboardCard title="Estados das Entregas" activeFilter={estadosFilter} onFilter={setEstadosFilter}>
+            {pedidosEstadosFiltrados.length === 0 ? (
+              <Center h="100%"><Text fontSize="sm" color="text.muted">Sem dados</Text></Center>
+            ) : (
+              <Chart
+              options={getRadialBarOptions()}
+              series={[
+                  Math.round((pedidosEstadosFiltrados.filter((p) => p.status === "entregue").length / Math.max(pedidosEstadosFiltrados.length, 1)) * 100),
+                  Math.round((pedidosEstadosFiltrados.filter((p) => EM_ANDAMENTO.includes(p.status)).length / Math.max(pedidosEstadosFiltrados.length, 1)) * 100),
+                  Math.round((pedidosEstadosFiltrados.filter((p) => p.status === "cancelado").length / Math.max(pedidosEstadosFiltrados.length, 1)) * 100),
+              ]}
+              type="radialBar"
+              width="100%"
+              height={260}
+              />
+            )}
         </DashboardCard>
         </GridItem>
 
         {/* Gráfico de area — segunda linha */}
         <GridItem>
-          <DashboardCard title="Entregas" value={totalPedidos} isBalance={false} >
+          <DashboardCard title="Entregas" value={totalPedidos} isBalance={false} activeFilter={entregasFilter} onFilter={setEntregasFilter}>
             <Chart
               options={getAreaOptions()}
               series={[{ name: "Entregas", data: dadosEntregas }]}

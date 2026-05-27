@@ -55,6 +55,14 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     console.log(`[Chat] Cliente desconectado: ${client.id}`);
   }
 
+  // Admin junta-se à sala role_admin
+  @SubscribeMessage('admin:join')
+  handleAdminJoin(@ConnectedSocket() client: Socket) {
+    client.join('role_admin');
+    console.log(`[Chat] Admin ${client.id} entrou na sala role_admin`);
+    return { event: 'admin:joined', data: { success: true } };
+  }
+
   // Utilizador junta-se à sua própria sala (chamado pelo cliente após conectar)
   @SubscribeMessage('user:join')
   handleUserJoin(@MessageBody() data: { userId: string }, @ConnectedSocket() client: Socket) {

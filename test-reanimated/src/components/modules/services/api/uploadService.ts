@@ -1,5 +1,7 @@
 // src/components/modules/services/api/uploadService.ts
-import api from './api';
+import { getIdToken } from '../firebase-token';
+
+const BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://192.168.43.220:3000';
 
 type TipoUpload =
   | 'foto-perfil'
@@ -12,34 +14,60 @@ type TipoUpload =
   | 'prova-entrega';
 
 /**
- * Envia um único ficheiro para o backend.
- * @param tipo   endpoint do upload (ex: 'foto-perfil')
- * @param uri    URI local do ficheiro (do ImagePicker / DocumentPicker)
- * @param mime   mime type (default: image/jpeg)
+ * Envia um ficheiro via XMLHttpRequest (fetch + FormData falha no React Native).
  */
-export const enviarFicheiro = async (
+export const enviarFicheiro = (
   tipo: TipoUpload,
   uri: string,
   mime = 'image/jpeg',
-) => {
-  const formData = new FormData();
-  const ext = uri.split('.').pop()?.toLowerCase() || 'jpg';
-  const filename = uri.split('/').pop() || `${tipo}.${ext}`;
+): Promise<any> => {
+  return new Promise(async (resolve, reject) => {
+    const ext = uri.split('.').pop()?.toLowerCase() || 'jpg';
+    const filename = uri.split('/').pop() || `${tipo}.${ext}`;
+    const token = await getIdToken();
+    const url = `${BASE_URL}/uploads/${tipo}`;
 
-  formData.append('file', {
-    uri,
-    type: mime,
-    name: filename,
-  } as any);
+    console.log(`[Upload] xhr → ${url} file=${filename} mime=${mime}`);
 
-  const res = await api.post(`/uploads/${tipo}`, formData);
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', url);
+    if (token) {
+      xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+    }
 
-  return res.data;
+    xhr.onload = () => {
+      console.log(`[Upload] status=${xhr.status}`);
+      if (xhr.status >= 200 && xhr.status < 300) {
+        try {
+          const data = JSON.parse(xhr.responseText);
+          console.log(`[Upload] OK`, JSON.stringify(data).substring(0, 100));
+          resolve(data);
+        } catch {
+          resolve(xhr.responseText);
+        }
+      } else {
+        reject(new Error(`Upload falhou (${xhr.status}): ${xhr.responseText}`));
+      }
+    };
+
+    xhr.onerror = () => {
+      console.warn(`[Upload] xhr.onerror — network error`);
+      reject(new Error('Network request failed'));
+    };
+
+    const formData = new FormData();
+    formData.append('file', {
+      uri,
+      type: mime,
+      name: filename,
+    } as any);
+
+    xhr.send(formData);
+  });
 };
 
 /**
  * Envia todos os documentos do registo de motoqueiro.
- * Chamado no final do DeliverRegisterFour.
  */
 export const enviarDocumentosMotoqueiro = async (docs: {
   fotoPerfil?: string | null;
@@ -49,7 +77,7 @@ export const enviarDocumentosMotoqueiro = async (docs: {
   fotoVerso?: string | null;
   fotoVersoMime?: string | null;
   fotoFrenteBI?: string | null;
-    fotoFrenteBIMime?: string | null;
+  fotoFrenteBIMime?: string | null;
   fotoVersoBI?: string | null;
   fotoVersoBIMime?: string | null;
   fotoVeiculo?: string | null;
@@ -75,13 +103,11 @@ export const enviarDocumentosMotoqueiro = async (docs: {
       continue;
     }
     try {
-      console.log(`[Upload] Enviando ${tipo} uri=${uri.substring(0, 50)}... mime=${mime}`);
       const result = await enviarFicheiro(tipo, uri, mime);
       console.log(`[Upload] OK ${tipo}:`, JSON.stringify(result).substring(0, 100));
     } catch (e: any) {
-      const errMsg = e?.response?.data?.message || e?.response?.data || e?.message || String(e);
+      const errMsg = e?.message || String(e);
       console.warn(`[Upload] Falha em ${tipo}:`, errMsg);
-      if (e?.response?.status) console.warn(`[Upload] Status: ${e.response.status}`);
       erros.push(tipo);
     }
   }

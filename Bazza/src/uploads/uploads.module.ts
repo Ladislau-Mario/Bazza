@@ -5,11 +5,13 @@ import { memoryStorage } from 'multer';
 import { Upload } from './entities/upload.entity';
 import { UploadsController } from './uploads.controller';
 import { UploadsService } from './uploads.service';
+import { ChatModule } from '../chat/chat.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([Upload]),
     MulterModule.register({ storage: memoryStorage() }),
+    ChatModule,
   ],
   controllers: [UploadsController],
   providers: [UploadsService],

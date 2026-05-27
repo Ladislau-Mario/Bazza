@@ -86,7 +86,7 @@ export class AdminController {
     return this.service.listarMotoqueiirosPendentes();
   }
 
-  /** Detalhes completos do motoqueiro (inclui uploads + flag podeAprovar) */
+  /** Detalhes completos do motoqueiro (inclui uploads + verificação de documentos) */
   @Get('motoqueiros/:id')
   @ApiOperation({ summary: 'Detalhes de motoqueiro para revisão' })
   detalhes(@Param('id') id: string) {
@@ -207,8 +207,8 @@ export class AdminController {
   // ── DOCUMENTOS ─────────────────────────────────────────────────────────────
   @Get('documentos')
   @ApiOperation({ summary: 'Todos os uploads/documentos' })
-  documentos(@Query('status') status?: string) {
-    return this.service.listarUploadsTodos(status);
+  documentos(@Query('skip') skip?: string, @Query('take') take?: string) {
+    return this.service.listarUploadsTodos(Number(skip) || 0, Number(take) || 20);
   }
 
   @Get('documentos/:id/imagem')
@@ -217,20 +217,5 @@ export class AdminController {
     const { buffer, mimeType } = await this.service.obterImagemDocumento(id);
     res.setHeader('Content-Type', mimeType);
     res.send(buffer);
-  }
-
-  @Patch('documentos/:id/aprovar')
-  @ApiOperation({ summary: 'Aprovar documento' })
-  aprovarDoc(@Param('id') id: string) {
-    return this.service.aprovarUpload(id);
-  }
-
-  @Patch('documentos/:id/rejeitar')
-  @ApiOperation({ summary: 'Rejeitar documento' })
-  rejeitarDoc(
-    @Param('id') id: string,
-    @Body('motivo') motivo: string,
-  ) {
-    return this.service.rejeitarUpload(id, motivo);
   }
 }

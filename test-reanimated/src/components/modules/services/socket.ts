@@ -3,7 +3,7 @@ import { io, Socket } from 'socket.io-client';
 import { getIdToken } from './firebase-token';
 import { auth } from '../../../../firebaseConfig';
 
-const SOCKET_URL = (process.env.EXPO_PUBLIC_API_URL || 'http://10.242.160.144:3000') + '/chat';
+const SOCKET_URL = (process.env.EXPO_PUBLIC_API_URL || 'http://192.168.43.220:3000') + '/chat';
 
 let socket: Socket | null = null;
 let refCount = 0;

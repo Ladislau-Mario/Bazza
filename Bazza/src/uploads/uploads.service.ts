@@ -6,12 +6,14 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { Upload, TipoUpload, UploadStatus } from './entities/upload.entity';
+import { Upload, TipoUpload } from './entities/upload.entity';
+import { ChatGateway } from '../chat/chat.gateway';
 
 @Injectable()
 export class UploadsService {
   constructor(
     @InjectRepository(Upload) private uploadRepo: Repository<Upload>,
+    private chatGateway: ChatGateway,
   ) {}
 
   async fazer(
@@ -49,30 +51,57 @@ export class UploadsService {
 
     // Substituir se já existe
     const existente = await this.uploadRepo.findOne({ where: { userId, tipo } });
+    let uploadId: string;
+    let isUpdate = false;
 
     if (existente) {
       existente.ficheiro = file.buffer;
       existente.nomeOriginal = file.originalname;
       existente.mimeType = file.mimetype;
       existente.tamanho = file.size;
-      existente.status = UploadStatus.PENDENTE;
-      existente.motivoRejeicao = '';
       await this.uploadRepo.save(existente);
-      return { message: 'Ficheiro actualizado', upload: this.formatarResponse(existente) };
+      uploadId = existente.id;
+      isUpdate = true;
+      console.log(`[Upload] Documento actualizado: ${existente.id}`);
+    } else {
+      const upload = this.uploadRepo.create({
+        userId,
+        tipo,
+        ficheiro: file.buffer,
+        nomeOriginal: file.originalname,
+        mimeType: file.mimetype,
+        tamanho: file.size,
+      });
+      const saved = await this.uploadRepo.save(upload);
+      uploadId = saved.id;
+      console.log(`[Upload] Novo documento criado: ${saved.id}`);
     }
 
-    const upload = this.uploadRepo.create({
-      userId,
-      tipo,
-      ficheiro: file.buffer,
-      nomeOriginal: file.originalname,
-      mimeType: file.mimetype,
-      tamanho: file.size,
-      status: UploadStatus.PENDENTE,
+    // Emitir evento socket para o admin — atualização em tempo real
+    try {
+      this.chatGateway.server.to('role_admin').emit('document:update', {
+        userId,
+        uploadId,
+        tipo,
+        nomeOriginal: file.originalname,
+        mimeType: file.mimetype,
+        criadoEm: new Date().toISOString(),
+        acao: isUpdate ? 'actualizado' : 'criado',
+      });
+      console.log(`[Upload] Socket emit → role_admin document:update ${tipo} (${isUpdate ? 'update' : 'new'})`);
+    } catch (err) {
+      console.warn('[Upload] Falha ao emitir socket:', err);
+    }
+
+    const uploadData = await this.uploadRepo.findOne({
+      where: { id: uploadId },
+      select: ['id', 'userId', 'tipo', 'nomeOriginal', 'mimeType', 'tamanho', 'criadoEm'],
     });
 
-    const saved = await this.uploadRepo.save(upload);
-    return { message: 'Ficheiro enviado com sucesso', upload: this.formatarResponse(saved) };
+    return {
+      message: isUpdate ? 'Ficheiro actualizado' : 'Ficheiro enviado com sucesso',
+      upload: uploadData,
+    };
   }
 
   async obterFicheiro(id: string) {
@@ -94,7 +123,7 @@ export class UploadsService {
   async buscarPorId(id: string) {
     const upload = await this.uploadRepo.findOne({
       where: { id },
-      select: ['id', 'userId', 'tipo', 'nomeOriginal', 'mimeType', 'tamanho', 'status', 'motivoRejeicao', 'criadoEm'],
+      select: ['id', 'userId', 'tipo', 'nomeOriginal', 'mimeType', 'tamanho', 'criadoEm'],
     });
     if (!upload) throw new NotFoundException('Upload não encontrado');
     return this.formatarResponse(upload);
@@ -104,21 +133,17 @@ export class UploadsService {
     const uploads = await this.uploadRepo
       .createQueryBuilder('u')
       .where('u.userId = :userId', { userId })
-      .select(['u.id', 'u.tipo', 'u.nomeOriginal', 'u.mimeType', 'u.tamanho', 'u.status', 'u.motivoRejeicao', 'u.criadoEm'])
+      .select(['u.id', 'u.tipo', 'u.nomeOriginal', 'u.mimeType', 'u.tamanho', 'u.criadoEm'])
       .orderBy('u.criadoEm', 'DESC')
       .getMany();
 
     return uploads.map((u) => this.formatarResponse(u));
   }
 
-  async listarTodos(status?: string, skip = 0, take = 20) {
+  async listarTodos(skip = 0, take = 20) {
     const query = this.uploadRepo
       .createQueryBuilder('u')
-      .select(['u.id', 'u.userId', 'u.tipo', 'u.nomeOriginal', 'u.mimeType', 'u.tamanho', 'u.status', 'u.motivoRejeicao', 'u.criadoEm']);
-
-    if (status) {
-      query.where('u.status = :status', { status });
-    }
+      .select(['u.id', 'u.userId', 'u.tipo', 'u.nomeOriginal', 'u.mimeType', 'u.tamanho', 'u.criadoEm']);
 
     const [uploads, total] = await query
       .orderBy('u.criadoEm', 'DESC')
@@ -132,32 +157,6 @@ export class UploadsService {
       page: Math.floor(skip / take) + 1,
       pageSize: take,
     };
-  }
-
-  async aprovar(id: string) {
-    const upload = await this.uploadRepo.findOne({ where: { id } });
-    if (!upload) throw new NotFoundException('Upload não encontrado');
-
-    upload.status = UploadStatus.APROVADO;
-    upload.motivoRejeicao = '';
-    await this.uploadRepo.save(upload);
-
-    return { message: 'Upload aprovado', upload: this.formatarResponse(upload) };
-  }
-
-  async rejeitar(id: string, motivo: string) {
-    const upload = await this.uploadRepo.findOne({ where: { id } });
-    if (!upload) throw new NotFoundException('Upload não encontrado');
-
-    if (!motivo?.trim()) {
-      throw new BadRequestException('Motivo da rejeição é obrigatório');
-    }
-
-    upload.status = UploadStatus.REJEITADO;
-    upload.motivoRejeicao = motivo;
-    await this.uploadRepo.save(upload);
-
-    return { message: 'Upload rejeitado', upload: this.formatarResponse(upload) };
   }
 
   async remover(id: string, userId: string) {

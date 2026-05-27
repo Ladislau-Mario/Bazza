@@ -15,6 +15,7 @@ interface DashboardContextData {
   isLoading: boolean;
   error: Error | null;
   receitaPorMes: (pedidos: IPedido[]) => number[];
+  faturaPorMes: (pedidos: IPedido[]) => number[];
   entregasPorMes: (pedidos: IPedido[]) => number[];
   motoqueiros: IMotoqueiro[];
   clientes: IUser[];
@@ -139,6 +140,15 @@ export function DashboardProvider({ children }: DashboardProviderProps) {
     return totais;
   }
 
+  function faturaPorMes(pedidos: IPedido[]) {
+    const totais = Array(12).fill(0);
+    pedidos.forEach((p) => {
+      const mes = new Date(p.criadoEm).getMonth();
+      totais[mes] += Number(p.valorEntrega || 0);
+    });
+    return totais;
+  }
+
   return (
     <DashboardContext.Provider
       value={{
@@ -154,6 +164,7 @@ export function DashboardProvider({ children }: DashboardProviderProps) {
         isLoading,
         error: queryError as Error | null,
         receitaPorMes: (pedidos) => receitaPorMes(pedidos),
+        faturaPorMes: (pedidos) => faturaPorMes(pedidos),
         entregasPorMes: (pedidos) => entregasPorMes(pedidos),
         motoqueirosPendentes,
         ticketsAbertos,

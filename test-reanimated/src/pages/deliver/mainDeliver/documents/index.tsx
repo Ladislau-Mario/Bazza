@@ -1,7 +1,7 @@
 // src/pages/deliver/mainDeliver/documents/index.tsx
 import React, { useState, useCallback } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity,
+  View, Text, StyleSheet, TouchableOpacity, Image,
   ScrollView, Alert, Platform, StatusBar,
   ActivityIndicator, RefreshControl,
 } from 'react-native';
@@ -12,6 +12,29 @@ import { themes } from '../../../../global/themes';
 import api from '../../../../components/modules/services/api/api';
 import { PickerService } from '../../../../components/modules/services/pickerService/pickerService';
 import { enviarFicheiro } from '../../../../components/modules/services/api/uploadService';
+import { useAuthImage } from '../../../../components/common/useAuthImage';
+import { DocumentViewer } from '../../../../components/common/DocumentViewer';
+
+// ── Thumbnail autenticado ──────────────────────────────────────────────────
+function DocThumbnail({ uploadId, version }: { uploadId: string; version: number }) {
+  const { dataUrl, loading, error } = useAuthImage(`/uploads/${uploadId}/download`);
+
+  if (loading) {
+    return (
+      <View style={s.thumbPlaceholder}>
+        <ActivityIndicator size="small" color="#3B7BFF" />
+      </View>
+    );
+  }
+  if (error || !dataUrl) {
+    return (
+      <View style={s.thumbPlaceholder}>
+        <Ionicons name="image-outline" size={20} color="#5A6B7B" />
+      </View>
+    );
+  }
+  return <Image source={{ uri: dataUrl }} style={s.thumbnail} resizeMode="cover" />;
+}
 
 // ── Tipos ──────────────────────────────────────────────────────────────────
 interface Documento {
@@ -20,8 +43,6 @@ interface Documento {
   nomeOriginal: string;
   mimeType: string;
   tamanho: number;
-  status: string;
-  motivoRejeicao?: string;
   criadoEm: string;
 }
 
@@ -46,33 +67,6 @@ const ALL_DOC_TYPES = [
   'foto_perfil',
 ];
 
-function getStatusColor(status: string) {
-  switch (status) {
-    case 'aprovado':  return '#22D07A';
-    case 'rejeitado': return '#EF4444';
-    case 'pendente':
-    default:          return '#F59E0B';
-  }
-}
-
-function getStatusLabel(status: string) {
-  switch (status) {
-    case 'aprovado':  return 'Aprovado';
-    case 'rejeitado': return 'Rejeitado';
-    case 'pendente':
-    default:          return 'Pendente';
-  }
-}
-
-function getStatusIcon(status: string) {
-  switch (status) {
-    case 'aprovado':  return 'checkmark-circle';
-    case 'rejeitado': return 'close-circle';
-    case 'pendente':
-    default:          return 'time';
-  }
-}
-
 function formatDate(dateStr: string) {
   const d = new Date(dateStr);
   return d.toLocaleDateString('pt-PT', { day: '2-digit', month: 'short', year: 'numeric' });
@@ -85,6 +79,8 @@ export default function DeliverDocuments() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [uploadingTipo, setUploadingTipo] = useState<string | null>(null);
+  const [viewerDoc, setViewerDoc] = useState<{ uploadId: string; label: string; mimeType: string } | null>(null);
+  const [docVersion, setDocVersion] = useState(0);
 
   const carregarDocumentos = useCallback(async () => {
     try {
@@ -110,10 +106,9 @@ export default function DeliverDocuments() {
     carregarDocumentos();
   };
 
-  // Encontrar o documento mais recente de um tipo
   const findDoc = (tipo: string) => documentos.find(d => d.tipo === tipo);
 
-  // Substituir documento
+  // Substituir documento — usa XMLHttpRequest via enviarFicheiro
   const handleReplace = async (tipo: string) => {
     const config = DOC_CONFIG[tipo];
     if (!config) return;
@@ -131,25 +126,21 @@ export default function DeliverDocuments() {
               if (!file) return;
 
               setUploadingTipo(tipo);
-
-              const formData = new FormData();
-              const ext = file.uri.split('.').pop()?.toLowerCase() || 'jpg';
-              const filename = file.name || `${tipo}.${ext}`;
               const mime = file.mimeType || 'image/jpeg';
 
-              formData.append('file', {
-                uri: file.uri,
-                type: mime,
-                name: filename,
-              } as any);
+              console.log(`[Docs] Upload via XHR → ${config.uploadTipo}`);
 
-              await api.post(`/uploads/${config.uploadTipo}`, formData);
+              await enviarFicheiro(config.uploadTipo as any, file.uri, mime);
 
-              Alert.alert('Sucesso', 'Documento enviado. Ficara pendente ate aprovacao.');
+              // Recarregar documentos do servidor
               await carregarDocumentos();
+              // Forçar re-render dos thumbnails
+              setDocVersion(v => v + 1);
+
+              Alert.alert('Sucesso', 'Documento actualizado com sucesso.');
             } catch (err: any) {
-              console.warn('[Docs] Erro no upload:', err?.response?.data || err?.message);
-              Alert.alert('Erro', 'Nao foi possivel enviar o documento.');
+              console.warn('[Docs] Erro no upload:', err?.message);
+              Alert.alert('Erro', err?.message || 'Nao foi possivel enviar o documento.');
             } finally {
               setUploadingTipo(null);
             }
@@ -165,28 +156,22 @@ export default function DeliverDocuments() {
     if (!config) return null;
 
     const doc = findDoc(tipo);
-    const status = doc?.status || 'nao_enviado';
-    const statusColor = doc ? getStatusColor(status) : '#2D3748';
     const isUploading = uploadingTipo === tipo;
 
     return (
       <View key={tipo} style={s.docCard}>
         <View style={s.docCardHeader}>
-          <View style={[s.docIconWrap, { backgroundColor: `${statusColor}18` }]}>
-            <Ionicons name={config.icon as any} size={20} color={statusColor} />
+          <View style={[s.docIconWrap, { backgroundColor: doc ? '#22D07A18' : '#3B7BFF18' }]}>
+            <Ionicons name={config.icon as any} size={20} color={doc ? '#22D07A' : '#3B7BFF'} />
           </View>
           <View style={s.docInfo}>
             <Text style={s.docLabel}>{config.label}</Text>
             {doc ? (
-              <>
-                <View style={s.statusRow}>
-                  <View style={[s.statusDot, { backgroundColor: statusColor }]} />
-                  <Text style={[s.statusText, { color: statusColor }]}>
-                    {getStatusLabel(status)}
-                  </Text>
-                </View>
+              <View style={s.statusRow}>
+                <View style={[s.statusDot, { backgroundColor: '#22D07A' }]} />
+                <Text style={[s.statusText, { color: '#22D07A' }]}>Enviado</Text>
                 <Text style={s.docDate}>{formatDate(doc.criadoEm)}</Text>
-              </>
+              </View>
             ) : (
               <Text style={s.docNotSent}>Nao enviado</Text>
             )}
@@ -209,27 +194,28 @@ export default function DeliverDocuments() {
           </TouchableOpacity>
         </View>
 
-        {/* Motivo de rejeicao */}
-        {status === 'rejeitado' && doc?.motivoRejeicao && (
-          <View style={s.rejeicaoBox}>
-            <Ionicons name="alert-circle-outline" size={14} color="#EF4444" />
-            <Text style={s.rejeicaoText}>{doc.motivoRejeicao}</Text>
-          </View>
+        {/* Thumbnail — version key forces re-mount after upload */}
+        {doc && (
+          <TouchableOpacity
+            style={s.thumbRow}
+            activeOpacity={0.8}
+            onPress={() => setViewerDoc({ uploadId: doc.id, label: config.label, mimeType: doc.mimeType })}
+          >
+            <DocThumbnail key={`${doc.id}-v${docVersion}`} uploadId={doc.id} version={docVersion} />
+            <Ionicons name="expand-outline" size={16} color="#5A6B7B" />
+          </TouchableOpacity>
         )}
       </View>
     );
   };
 
-  // Contagem de status
-  const aprovados = documentos.filter(d => d.status === 'aprovado').length;
-  const pendentes = documentos.filter(d => d.status === 'pendente').length;
-  const rejeitados = documentos.filter(d => d.status === 'rejeitado').length;
+  const enviados = documentos.length;
+  const totalDocTipos = ALL_DOC_TYPES.length;
 
   return (
     <View style={s.root}>
       <StatusBar barStyle="light-content" />
 
-      {/* ── Header ── */}
       <View style={s.header}>
         <LinearGradient
           colors={['#1A2A4A', '#0F1923']}
@@ -249,28 +235,21 @@ export default function DeliverDocuments() {
           <View style={{ width: 40 }} />
         </View>
 
-        {/* Resumo */}
-        {!loading && documentos.length > 0 && (
+        {!loading && (
           <View style={s.summaryRow}>
             <View style={s.summaryItem}>
-              <Text style={[s.summaryCount, { color: '#22D07A' }]}>{aprovados}</Text>
-              <Text style={s.summaryLabel}>Aprovados</Text>
+              <Text style={[s.summaryCount, { color: '#22D07A' }]}>{enviados}</Text>
+              <Text style={s.summaryLabel}>Enviados</Text>
             </View>
             <View style={s.summaryDivider} />
             <View style={s.summaryItem}>
-              <Text style={[s.summaryCount, { color: '#F59E0B' }]}>{pendentes}</Text>
-              <Text style={s.summaryLabel}>Pendentes</Text>
-            </View>
-            <View style={s.summaryDivider} />
-            <View style={s.summaryItem}>
-              <Text style={[s.summaryCount, { color: '#EF4444' }]}>{rejeitados}</Text>
-              <Text style={s.summaryLabel}>Rejeitados</Text>
+              <Text style={[s.summaryCount, { color: '#F59E0B' }]}>{totalDocTipos - enviados}</Text>
+              <Text style={s.summaryLabel}>Em falta</Text>
             </View>
           </View>
         )}
       </View>
 
-      {/* ── Conteudo ── */}
       {loading ? (
         <View style={s.centerWrap}>
           <ActivityIndicator size="large" color="#3B7BFF" />
@@ -286,15 +265,23 @@ export default function DeliverDocuments() {
         >
           {ALL_DOC_TYPES.map(renderDocCard)}
 
-          {/* Info sobre aprovacao */}
           <View style={s.infoBox}>
             <Ionicons name="information-circle-outline" size={18} color="#3B7BFF" />
             <Text style={s.infoText}>
-              Os documentos rejeitados devem ser substituidos. Apos envio, ficam pendentes ate a aprovacao do administrador.
+              Após envio dos documentos, o administrador irá avaliar o teu perfil como um todo.
+              A aprovação aplica-se ao motoqueiro, não a cada documento individualmente.
             </Text>
           </View>
         </ScrollView>
       )}
+
+      <DocumentViewer
+        visible={!!viewerDoc}
+        uploadId={viewerDoc?.uploadId ?? null}
+        label={viewerDoc?.label ?? ''}
+        mimeType={viewerDoc?.mimeType}
+        onClose={() => setViewerDoc(null)}
+      />
     </View>
   );
 }
@@ -302,8 +289,6 @@ export default function DeliverDocuments() {
 // ── Estilos ────────────────────────────────────────────────────────────────
 const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#080C10' },
-
-  // Header
   header: {
     borderBottomLeftRadius: 32,
     borderBottomRightRadius: 32,
@@ -333,8 +318,6 @@ const s = StyleSheet.create({
     color: '#fff',
     fontFamily: themes.fonts.poppinsSemi,
   },
-
-  // Summary
   summaryRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -346,11 +329,7 @@ const s = StyleSheet.create({
   summaryCount: { fontSize: 22, fontFamily: themes.fonts.poppinsBold },
   summaryLabel: { fontSize: 11, color: '#8899AA', fontFamily: themes.fonts.poppinsRegular, marginTop: 2 },
   summaryDivider: { width: 1, height: 32, backgroundColor: '#FFFFFF10' },
-
-  // Scroll
   scroll: { paddingHorizontal: 16, paddingBottom: 120, gap: 12 },
-
-  // Document card
   docCard: {
     backgroundColor: '#0F1923',
     borderRadius: 18,
@@ -379,9 +358,8 @@ const s = StyleSheet.create({
   statusRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   statusDot: { width: 7, height: 7, borderRadius: 4 },
   statusText: { fontSize: 12, fontFamily: themes.fonts.poppinsMedium },
-  docDate: { fontSize: 11, color: '#5A6B7B', fontFamily: themes.fonts.poppinsRegular, marginTop: 2 },
+  docDate: { fontSize: 11, color: '#5A6B7B', fontFamily: themes.fonts.poppinsRegular },
   docNotSent: { fontSize: 12, color: '#5A6B7B', fontFamily: themes.fonts.poppinsRegular },
-
   docActionBtn: {
     width: 40, height: 40,
     borderRadius: 12,
@@ -390,29 +368,29 @@ const s = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-
-  // Rejeicao
-  rejeicaoBox: {
+  thumbRow: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    alignItems: 'center',
+    justifyContent: 'center',
     gap: 8,
     marginTop: 12,
     paddingTop: 12,
     borderTopWidth: 1,
-    borderTopColor: '#EF444415',
-    backgroundColor: '#EF444408',
+    borderTopColor: '#FFFFFF08',
+  },
+  thumbnail: {
+    width: '100%',
+    height: 120,
     borderRadius: 10,
-    padding: 10,
   },
-  rejeicaoText: {
-    flex: 1,
-    fontSize: 12,
-    color: '#EF4444',
-    fontFamily: themes.fonts.poppinsRegular,
-    lineHeight: 18,
+  thumbPlaceholder: {
+    width: '100%',
+    height: 120,
+    borderRadius: 10,
+    backgroundColor: '#1A2535',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-
-  // Info box
   infoBox: {
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -431,8 +409,6 @@ const s = StyleSheet.create({
     fontFamily: themes.fonts.poppinsRegular,
     lineHeight: 18,
   },
-
-  // Loading
   centerWrap: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 12 },
   loadingText: { fontSize: 13, color: '#5A6B7B', fontFamily: themes.fonts.poppinsRegular },
 });

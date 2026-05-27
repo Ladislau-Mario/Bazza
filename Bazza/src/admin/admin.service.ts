@@ -111,9 +111,8 @@ export class AdminService {
 
   /**
    * Aprovar motoqueiro.
-   * 1. Verifica se tem pelo menos 5 documentos aprovados (BI frente/verso, carta frente/verso, veículo)
-   * 2. Activa o motoqueiro
-   * 3. Envia push de confirmação
+   * Verifica se tem todos os documentos obrigatórios (existência, não status).
+   * O motoqueiro é aprovado como um todo — não existe aprovação por documento individual.
    */
   async aprovarMotoqueiro(id: string) {
     const motoqueiro = await this.motoRepo.findOne({
@@ -125,14 +124,12 @@ export class AdminService {
       return { message: 'Motoqueiro já está activo' };
     }
 
-    // Verificar documentos aprovados
-    const docsAprovados = await this.uploadRepo.count({
-      where: { userId: motoqueiro.userId, status: 'aprovado' as any },
-    });
+    // Verificar se tem todos os documentos obrigatórios
+    const temTodosDocumentos = await this.uploads.temTodosDocumentosObrigatorios(motoqueiro.userId);
 
-    if (docsAprovados < 5) {
+    if (!temTodosDocumentos) {
       throw new BadRequestException(
-        `Motoqueiro tem apenas ${docsAprovados} documentos aprovados. São necessários pelo menos 5.`,
+        'Motoqueiro não tem todos os documentos obrigatórios.',
       );
     }
 
@@ -278,16 +275,8 @@ export class AdminService {
   }
 
   // ── DOCUMENTOS / UPLOADS ───────────────────────────────────────────────────
-  async listarUploadsTodos(status?: string) {
-    return this.uploads.listarTodos(status);
-  }
-
-  async aprovarUpload(id: string) {
-    return this.uploads.aprovar(id);
-  }
-
-  async rejeitarUpload(id: string, motivo: string) {
-    return this.uploads.rejeitar(id, motivo);
+  async listarUploadsTodos(skip = 0, take = 20) {
+    return this.uploads.listarTodos(skip, take);
   }
 
   async obterImagemDocumento(uploadId: string): Promise<{ buffer: Buffer; mimeType: string }> {
@@ -296,34 +285,37 @@ export class AdminService {
 
   /**
    * Ver detalhes completos de um motoqueiro para o admin:
-   * dados pessoais + veículos + uploads + status dos documentos
+   * dados pessoais + veículos + uploads + verificação de documentos
    */
   async detalhesMotoqueiro(motoqueiroId: string) {
-  const motoqueiro = await this.motoRepo.findOne({
-    where: { id: motoqueiroId },
-    relations: ['user', 'veiculos'],
-  });
-  if (!motoqueiro) throw new NotFoundException('Motoqueiro não encontrado');
+    const motoqueiro = await this.motoRepo.findOne({
+      where: { id: motoqueiroId },
+      relations: ['user', 'veiculos'],
+    });
+    if (!motoqueiro) throw new NotFoundException('Motoqueiro não encontrado');
 
-  // Alterado para trazer as entidades limpas com getMany()
-  const uploads = await this.uploadRepo
-    .createQueryBuilder('u')
-    .where('u.userId = :userId', { userId: motoqueiro.userId })
-    .orderBy('u.criadoEm', 'DESC')
-    .getMany(); 
+    const uploads = await this.uploadRepo
+      .createQueryBuilder('u')
+      .where('u.userId = :userId', { userId: motoqueiro.userId })
+      .orderBy('u.criadoEm', 'DESC')
+      .getMany();
 
-  // Agora as propriedades usam a nomenclatura padrão da entidade (sem o "u_")
-  const docsAprovados = uploads.filter(u => u.status === 'aprovado').length;
-  const podeAprovar = docsAprovados >= 5;
+    const tiposObrigatorios = [
+      'foto_perfil', 'documento_bi_frente', 'documento_bi_verso',
+      'documento_carta_frente', 'documento_carta_verso', 'foto_veiculo', 'foto_placa',
+    ];
+    const tiposEnviados = uploads.map(u => u.tipo);
+    const tiposEmFalta = tiposObrigatorios.filter(t => !tiposEnviados.includes(t as any));
+    const temTodosDocumentos = tiposEmFalta.length === 0;
 
-  return {
-    motoqueiro,
-    uploads,
-    docsAprovados,
-    podeAprovar,
-    mensagem: podeAprovar
-      ? 'Todos os documentos estão aprovados. Pode aprovar o motoqueiro.'
-      : `Faltam ${5 - docsAprovados} documentos aprovados para poder aprovar o motoqueiro.`,
-  };
-}
+    return {
+      motoqueiro,
+      uploads,
+      temTodosDocumentos,
+      tiposEmFalta,
+      mensagem: temTodosDocumentos
+        ? 'Todos os documentos estão presentes. Pode aprovar o motoqueiro.'
+        : `Faltam ${tiposEmFalta.length} documentos para poder aprovar o motoqueiro.`,
+    };
+  }
 }

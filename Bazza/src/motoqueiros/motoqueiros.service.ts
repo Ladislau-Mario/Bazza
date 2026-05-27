@@ -8,7 +8,7 @@ import { Repository } from 'typeorm';
 import { Deliver, DeliverStatus, DeliverDisponibilidade } from './entities/motoqueiro.entity';
 import { Veiculo } from './entities/veiculo.entity';
 import { User, UserRole, UserStatus } from '../users/entities/user.entity';
-import { Upload, UploadStatus } from '../uploads/entities/upload.entity';
+import { Upload } from '../uploads/entities/upload.entity';
 import { UsersService } from '../users/users.service';
 import { UploadsService } from '../uploads/uploads.service';
 
@@ -126,6 +126,10 @@ export class MotoqueirosService {
     return motoqueiro;
   }
 
+  /**
+   * Buscar documentos do motoqueiro.
+   * Os documentos não têm status individual — o motoqueiro é aprovado como um todo.
+   */
   async buscarMeusDocumentos(userId: string) {
     const uploads = await this.uploadRepo
       .createQueryBuilder('u')
@@ -147,8 +151,6 @@ export class MotoqueirosService {
         'u.nomeOriginal',
         'u.mimeType',
         'u.tamanho',
-        'u.status',
-        'u.motivoRejeicao',
         'u.criadoEm',
       ])
       .orderBy('u.criadoEm', 'DESC')
@@ -160,8 +162,6 @@ export class MotoqueirosService {
       nomeOriginal: u.nomeOriginal,
       mimeType: u.mimeType,
       tamanho: u.tamanho,
-      status: u.status,
-      motivoRejeicao: u.motivoRejeicao,
       criadoEm: u.criadoEm,
     }));
   }
@@ -174,6 +174,10 @@ export class MotoqueirosService {
     });
   }
 
+  /**
+   * Ver detalhes completos do motoqueiro.
+   * A verificação de documentos é por existência, não por status.
+   */
   async verDetalhesCompletos(motoqueiroId: string) {
     const motoqueiro = await this.motoRepo.findOne({
       where: { id: motoqueiroId },
@@ -190,39 +194,47 @@ export class MotoqueirosService {
         'u.nomeOriginal',
         'u.mimeType',
         'u.tamanho',
-        'u.status',
         'u.criadoEm',
       ])
       .orderBy('u.criadoEm', 'DESC')
       .getMany();
 
+    const temTodosDocumentos = await this.uploadsService.temTodosDocumentosObrigatorios(motoqueiro.userId);
+
     return {
       motoqueiro,
       uploads,
-      todosDocumentosAprovados: uploads.every((u) => u.status === 'aprovado'),
+      temTodosDocumentos,
     };
   }
 
+  /**
+   * Aprovar motoqueiro.
+   * Verifica se tem todos os documentos obrigatórios (por existência, não status).
+   */
   async aprovar(motoqueiroId: string) {
-    const motoqueiro = await this.motoRepo.findOne({ where: { id: motoqueiroId } });
+    const motoqueiro = await this.motoRepo.findOne({
+      where: { id: motoqueiroId },
+      relations: ['user'],
+    });
     if (!motoqueiro) throw new NotFoundException('Motoqueiro não encontrado');
 
-    const docsAprovados = await this.uploadRepo.count({
-      where: {
-        userId: motoqueiro.userId,
-        status: UploadStatus.APROVADO,
-      },
-    });
+    const temTodosDocumentos = await this.uploadsService.temTodosDocumentosObrigatorios(motoqueiro.userId);
 
-    if (docsAprovados < 5) {
+    if (!temTodosDocumentos) {
       throw new BadRequestException(
-        'Aprove primeiro todos os documentos (mínimo 5).',
+        'Motoqueiro não tem todos os documentos obrigatórios.',
       );
     }
 
     motoqueiro.status = DeliverStatus.ACTIVO;
     motoqueiro.aprovadoEm = new Date();
-    return this.motoRepo.save(motoqueiro);
+    await this.motoRepo.save(motoqueiro);
+
+    // Activar o user também
+    await this.userRepo.update(motoqueiro.userId, { status: UserStatus.ACTIVE });
+
+    return { message: 'Motoqueiro aprovado' };
   }
 
   async rejeitar(motoqueiroId: string, motivo: string) {
@@ -236,7 +248,7 @@ export class MotoqueirosService {
     await this.motoRepo.save(motoqueiro);
 
     await this.userRepo.update(motoqueiro.userId, {
-      status: 'suspended' as any,
+      status: UserStatus.SUSPENDED,
     });
 
     return { message: 'Motoqueiro rejeitado' };

@@ -4,15 +4,18 @@ import { api } from "@/services/api";
 import {
   Flex, Avatar, Box, Divider, Button, Text,
   HStack, Stack, Tag, TagLabel, TagLeftIcon,
-  Image, SimpleGrid, Spinner, Center,
+  SimpleGrid, Spinner, Center,
   Tabs, TabList, Tab, TabPanels, TabPanel,
   Breadcrumb, BreadcrumbItem, BreadcrumbLink,
+  useToast,
 } from "@chakra-ui/react";
-import { useState, useEffect } from "react";
+import { AuthImage } from "@/components/UI/AuthImage";
+import { useState, useEffect, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
 import { RiCircleFill } from "react-icons/ri";
 import { ResponsiveLayout } from "@/components/UI/ResponsiveLayout";
 import { MdOutlineKeyboardDoubleArrowRight } from "react-icons/md";
+import { useSocket } from "@/hooks/useSocket";
 
 const statusColor: Record<string, string> = {
   pendente_aprovacao: "yellow",
@@ -29,28 +32,65 @@ const statusLabel: Record<string, string> = {
 export default function ViewMorePage() {
   const searchParams = useSearchParams();
   const id = searchParams.get("id");
+  const toast = useToast();
 
   const [rider, setRider] = useState<any>(null);
   const [uploads, setUploads] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  // version key to force AuthImage re-render after document update
+  const [docVersion, setDocVersion] = useState(0);
+
+  const { on, off } = useSocket();
+
+  // Carregar dados do motoqueiro
+  const carregarDados = useCallback(async () => {
+    if (!id) return;
+    try {
+      const res = await api.get(`/admin/motoqueiros/${id}`);
+      const data = res.data;
+      if (data.motoqueiro) {
+        setRider(data.motoqueiro);
+        setUploads(data.uploads || []);
+      } else {
+        setRider(data);
+        setUploads(data.uploads || []);
+      }
+    } catch {
+      setLoading(false);
+    } finally {
+      setLoading(false);
+    }
+  }, [id]);
 
   useEffect(() => {
-    if (!id) return;
-    api.get(`/admin/motoqueiros/${id}`)
-      .then((res) => {
-        const data = res.data;
-        // A API pode retornar { motoqueiro, uploads, ... } ou o motoqueiro directamente
-        if (data.motoqueiro) {
-          setRider(data.motoqueiro);
-          setUploads(data.uploads || []);
-        } else {
-          setRider(data);
-          setUploads(data.uploads || []);
-        }
-      })
-      .catch(() => setLoading(false))
-      .finally(() => setLoading(false));
-  }, [id]);
+    carregarDados();
+  }, [carregarDados]);
+
+  // Escutar eventos socket de atualização de documentos em tempo real
+  useEffect(() => {
+    const handler = (data: any) => {
+      // Só atualizar se o documento pertence ao motoqueiro que estamos a ver
+      if (rider?.userId && data.userId === rider.userId) {
+        console.log("[Admin] Documento actualizado via socket:", data);
+        // Recarregar uploads do servidor
+        carregarDados();
+        // Forçar re-render das imagens
+        setDocVersion(v => v + 1);
+        toast({
+          title: "Documento actualizado",
+          description: `${data.tipo} foi ${data.acao} pelo entregador`,
+          status: "info",
+          duration: 3000,
+          isClosable: true,
+        });
+      }
+    };
+
+    on("document:update", handler);
+    return () => {
+      off("document:update", handler);
+    };
+  }, [rider?.userId, on, off, carregarDados, toast]);
 
   async function updateStatus(action: "aprovar" | "rejeitar" | "suspender") {
     if (!rider) return;
@@ -76,8 +116,10 @@ export default function ViewMorePage() {
   const getUploadUrl = (tipo: string) => {
     const upload = uploads.find((u: any) => u.tipo === tipo);
     if (!upload) return undefined;
-    return `${api.defaults.baseURL}/admin/documentos/${upload.id}/imagem`;
+    // adicionar versão para quebrar cache quando documento é actualizado
+    return `${api.defaults.baseURL}/admin/documentos/${upload.id}/imagem?v=${docVersion}`;
   };
+
   const veiculo = rider.veiculos?.[0] || rider.veiculo || null;
 
   return (
@@ -158,21 +200,95 @@ export default function ViewMorePage() {
               <Box bg="bg.card" border="2px" borderColor="border.default" rounded="xl" p={6}>
                 <Text fontWeight="bold" fontSize="lg" mb={1}>Foto de Perfil</Text>
                 <Text fontSize="sm" color="text.secondary" mb={4}>Imagem enviada pelo entregador</Text>
-                <Image src={getUploadUrl("foto_perfil")} alt="Foto Perfil" rounded="md" w="200px" h="200px" objectFit="cover" fallbackSrc="https://via.placeholder.com/200x200?text=Sem+foto" />
+                <AuthImage
+                  key={`foto_perfil-v${docVersion}`}
+                  src={getUploadUrl("foto_perfil")}
+                  alt="Foto Perfil"
+                  rounded="md" w="200px" h="200px"
+                  objectFit="cover"
+                  fallbackSrc="https://via.placeholder.com/200x200?text=Sem+foto"
+                />
               </Box>
               <Box bg="bg.card" border="2px" borderColor="border.default" rounded="xl" p={6}>
                 <Text fontWeight="bold" fontSize="lg" mb={1}>Bilhete de Identidade</Text>
                 <Text fontSize="sm" color="text.secondary" mb={4}>Nº {rider.user?.numeroDocumento}</Text>
                 <SimpleGrid columns={2} gap={4}>
-                  <Box><Text fontSize="sm" color="text.secondary" mb={2}>Frente</Text><Image src={getUploadUrl("documento_bi_frente")} alt="BI Frente" rounded="md" w="100%" h="180px" objectFit="cover" fallbackSrc="https://via.placeholder.com/400x180?text=Sem+imagem" /></Box>
-                  <Box><Text fontSize="sm" color="text.secondary" mb={2}>Verso</Text><Image src={getUploadUrl("documento_bi_verso")} alt="BI Verso" rounded="md" w="100%" h="180px" objectFit="cover" fallbackSrc="https://via.placeholder.com/400x180?text=Sem+imagem" /></Box>
+                  <Box>
+                    <Text fontSize="sm" color="text.secondary" mb={2}>Frente</Text>
+                    <AuthImage
+                      key={`bi_frente-v${docVersion}`}
+                      src={getUploadUrl("documento_bi_frente")}
+                      alt="BI Frente"
+                      rounded="md" w="100%" h="180px"
+                      objectFit="cover"
+                      fallbackSrc="https://via.placeholder.com/400x180?text=Sem+imagem"
+                    />
+                  </Box>
+                  <Box>
+                    <Text fontSize="sm" color="text.secondary" mb={2}>Verso</Text>
+                    <AuthImage
+                      key={`bi_verso-v${docVersion}`}
+                      src={getUploadUrl("documento_bi_verso")}
+                      alt="BI Verso"
+                      rounded="md" w="100%" h="180px"
+                      objectFit="cover"
+                      fallbackSrc="https://via.placeholder.com/400x180?text=Sem+imagem"
+                    />
+                  </Box>
                 </SimpleGrid>
               </Box>
               <Box bg="bg.card" border="2px" borderColor="border.default" rounded="xl" p={6}>
                 <Text fontWeight="bold" fontSize="lg" mb={4}>Carta de Condução</Text>
                 <SimpleGrid columns={2} gap={4}>
-                  <Box><Text fontSize="sm" color="text.secondary" mb={2}>Frente</Text><Image src={getUploadUrl("documento_carta_frente")} alt="Carta Frente" rounded="md" w="100%" h="180px" objectFit="cover" fallbackSrc="https://via.placeholder.com/400x180?text=Sem+imagem" /></Box>
-                  <Box><Text fontSize="sm" color="text.secondary" mb={2}>Verso</Text><Image src={getUploadUrl("documento_carta_verso")} alt="Carta Verso" rounded="md" w="100%" h="180px" objectFit="cover" fallbackSrc="https://via.placeholder.com/400x180?text=Sem+imagem" /></Box>
+                  <Box>
+                    <Text fontSize="sm" color="text.secondary" mb={2}>Frente</Text>
+                    <AuthImage
+                      key={`carta_frente-v${docVersion}`}
+                      src={getUploadUrl("documento_carta_frente")}
+                      alt="Carta Frente"
+                      rounded="md" w="100%" h="180px"
+                      objectFit="cover"
+                      fallbackSrc="https://via.placeholder.com/400x180?text=Sem+imagem"
+                    />
+                  </Box>
+                  <Box>
+                    <Text fontSize="sm" color="text.secondary" mb={2}>Verso</Text>
+                    <AuthImage
+                      key={`carta_verso-v${docVersion}`}
+                      src={getUploadUrl("documento_carta_verso")}
+                      alt="Carta Verso"
+                      rounded="md" w="100%" h="180px"
+                      objectFit="cover"
+                      fallbackSrc="https://via.placeholder.com/400x180?text=Sem+imagem"
+                    />
+                  </Box>
+                </SimpleGrid>
+              </Box>
+              <Box bg="bg.card" border="2px" borderColor="border.default" rounded="xl" p={6}>
+                <Text fontWeight="bold" fontSize="lg" mb={4}>Veículo</Text>
+                <SimpleGrid columns={2} gap={4}>
+                  <Box>
+                    <Text fontSize="sm" color="text.secondary" mb={2}>Foto Veículo</Text>
+                    <AuthImage
+                      key={`foto_veiculo-v${docVersion}`}
+                      src={getUploadUrl("foto_veiculo")}
+                      alt="Veículo"
+                      rounded="md" w="100%" h="180px"
+                      objectFit="cover"
+                      fallbackSrc="https://via.placeholder.com/400x180?text=Sem+imagem"
+                    />
+                  </Box>
+                  <Box>
+                    <Text fontSize="sm" color="text.secondary" mb={2}>Foto Placa</Text>
+                    <AuthImage
+                      key={`foto_placa-v${docVersion}`}
+                      src={getUploadUrl("foto_placa")}
+                      alt="Placa"
+                      rounded="md" w="100%" h="180px"
+                      objectFit="cover"
+                      fallbackSrc="https://via.placeholder.com/400x180?text=Sem+imagem"
+                    />
+                  </Box>
                 </SimpleGrid>
               </Box>
             </Stack>
@@ -182,24 +298,18 @@ export default function ViewMorePage() {
             <Box bg="bg.card" border="2px" borderColor="border.default" rounded="xl" p={6}>
               <Text fontWeight="bold" fontSize="lg" mb={4}>Dados do Veículo</Text>
               {veiculo ? (
-                <>
-                  <SimpleGrid columns={{ base: 1, md: 2 }} gap={4} mb={6}>
-                    <Box><Text fontSize="sm" color="text.secondary">Marca / Modelo</Text><Text>{veiculo.marca} {veiculo.modelo}</Text></Box>
-                    <Box><Text fontSize="sm" color="text.secondary">Ano</Text><Text>{veiculo.ano}</Text></Box>
-                    <Box><Text fontSize="sm" color="text.secondary">Matrícula</Text><Text>{veiculo.matricula || veiculo.placa}</Text></Box>
-                    <Box>
-                      <Text fontSize="sm" color="text.secondary">Cor</Text>
-                      <HStack gap={2}>
-                        <Box w="16px" h="16px" rounded="full" bg={veiculo.cor || veiculo.corPrincipal} border="1px solid" borderColor="whiteAlpha.300" />
-                        <Text textTransform="capitalize">{veiculo.cor || veiculo.corPrincipal}</Text>
-                      </HStack>
-                    </Box>
-                  </SimpleGrid>
-                  <Text fontSize="sm" color="text.secondary" mb={2}>Foto do veículo</Text>
-                  <Image src={getUploadUrl("foto_veiculo")} alt="Veículo" rounded="md" w="100%" h="220px" objectFit="cover" fallbackSrc="https://via.placeholder.com/800x220?text=Sem+imagem" />
-                  <Text fontSize="sm" color="text.secondary" mt={4} mb={2}>Foto da placa</Text>
-                  <Image src={getUploadUrl("foto_placa")} alt="Placa" rounded="md" w="100%" h="180px" objectFit="cover" fallbackSrc="https://via.placeholder.com/400x180?text=Sem+imagem" />
-                </>
+                <SimpleGrid columns={{ base: 1, md: 2 }} gap={4}>
+                  <Box><Text fontSize="sm" color="text.secondary">Marca / Modelo</Text><Text>{veiculo.marca} {veiculo.modelo}</Text></Box>
+                  <Box><Text fontSize="sm" color="text.secondary">Ano</Text><Text>{veiculo.ano}</Text></Box>
+                  <Box><Text fontSize="sm" color="text.secondary">Matrícula</Text><Text>{veiculo.matricula || veiculo.placa}</Text></Box>
+                  <Box>
+                    <Text fontSize="sm" color="text.secondary">Cor</Text>
+                    <HStack gap={2}>
+                      <Box w="16px" h="16px" rounded="full" bg={veiculo.cor || veiculo.corPrincipal} border="1px solid" borderColor="whiteAlpha.300" />
+                      <Text textTransform="capitalize">{veiculo.cor || veiculo.corPrincipal}</Text>
+                    </HStack>
+                  </Box>
+                </SimpleGrid>
               ) : (
                 <Text color="text.secondary">Sem informação de veículo.</Text>
               )}

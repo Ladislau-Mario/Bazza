@@ -3,7 +3,7 @@ import axios, { AxiosInstance, AxiosError } from 'axios';
 import { getIdToken } from '../firebase-token';
 
 // ─── IP do servidor — alterar para o IP da tua máquina na rede local ─────────
-const BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://10.242.160.144:3000';
+const BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://192.168.43.220:3000';
 
 const api: AxiosInstance = axios.create({
   baseURL: BASE_URL,

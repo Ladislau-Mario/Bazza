@@ -366,7 +366,7 @@ export function makeServer(): Server {
     // Catch-all: ignora pedidos RSC e outros não definidos
     this.passthrough();
     this.namespace = "";
-    this.passthrough("http://10.242.160.144:3000/**");
+    this.passthrough("http://192.168.43.220:3000/**");
     this.passthrough("http://localhost:3000/**");
     },
   });

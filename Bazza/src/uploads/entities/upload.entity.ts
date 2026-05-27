@@ -6,12 +6,6 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 
-export enum UploadStatus {
-  PENDENTE = 'pendente',
-  APROVADO = 'aprovado',
-  REJEITADO = 'rejeitado',
-}
-
 export enum TipoUpload {
   FOTO_PERFIL = 'foto_perfil',
   DOCUMENTO_BI_FRENTE = 'documento_bi_frente',
@@ -48,12 +42,6 @@ export class Upload {
 
   @Column()
   tamanho: number;
-
-  @Column({ type: 'enum', enum: UploadStatus, default: UploadStatus.PENDENTE })
-  status: UploadStatus;
-
-  @Column({ nullable: true })
-  motivoRejeicao: string;
 
   @CreateDateColumn()
   criadoEm: Date;

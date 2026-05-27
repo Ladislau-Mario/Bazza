@@ -127,12 +127,21 @@ export class SuporteService {
   }
 
   async listarTodosTickets() {
-    return this.repo
+    const tickets = await this.repo
       .createQueryBuilder('s')
       .leftJoinAndSelect('s.user', 'user')
       .where('s.status NOT IN (:...excluidos)', { excluidos: ['eliminado'] })
       .orderBy('s.criadoEm', 'DESC')
       .getMany();
+
+    // Contar mensagens não lidas (vindas do cliente) para cada ticket
+    const ticketsComNaoLidas = await Promise.all(
+      tickets.map(async (t) => {
+        const naoLidas = await this.contarNaoLidas(t.id, 'admin');
+        return { ...t, mensagensNaoLidas: naoLidas };
+      }),
+    );
+    return ticketsComNaoLidas;
   }
 
   async eliminarTodos() {

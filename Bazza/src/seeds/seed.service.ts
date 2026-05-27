@@ -6,7 +6,7 @@ import { Deliver, DeliverStatus, DeliverDisponibilidade } from '../motoqueiros/e
 import { Veiculo } from '../motoqueiros/entities/veiculo.entity';
 import { Pedido, StatusPedido, TipoPagamento } from '../pedidos/entities/pedido.entity';
 import { Plano, TipoPlano, StatusPlano } from '../planos/entities/plano.entity';
-import { Upload, TipoUpload, UploadStatus } from '../uploads/entities/upload.entity';
+import { Upload, TipoUpload } from '../uploads/entities/upload.entity';
 
 @Injectable()
 export class SeedService {
@@ -148,7 +148,7 @@ export class SeedService {
         ativo: true,
       }));
 
-      // Criar 5 documentos aprovados
+      // Criar 5 documentos (sem status — o motoqueiro é aprovado como um todo)
       for (const tipo of docTipos) {
         await this.uploadRepo.save(this.uploadRepo.create({
           userId: user.id,
@@ -157,7 +157,6 @@ export class SeedService {
           mimeType: 'image/png',
           ficheiro: dummyPng,
           tamanho: dummyPng.length,
-          status: UploadStatus.APROVADO,
         } as any));
       }
 
@@ -257,7 +256,7 @@ export class SeedService {
   }
 
   /**
-   * Garantir que todos os delivers têm 5 documentos aprovados (uploads).
+   * Garantir que todos os delivers têm 5 documentos (uploads).
    * Se um deliver não tem documentos, criar automaticamente.
    */
   private async garantirDocumentosDeliver() {
@@ -293,7 +292,6 @@ export class SeedService {
           mimeType: 'image/png',
           ficheiro: dummyPng,
           tamanho: dummyPng.length,
-          status: UploadStatus.APROVADO,
         } as any));
       }
       this.log.log(`  → Docs adicionados para: ${deliver.user?.nome || deliver.userId}`);
